@@ -1,0 +1,83 @@
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent init
+STDOUT:
+Config: /var/folders/sh/llmqgsmx211cw69lq_0hmjs40000gp/T/cryptogent-tests-h7hyv3l_/cryptogent.toml
+DB:     /var/folders/sh/llmqgsmx211cw69lq_0hmjs40000gp/T/cryptogent-tests-h7hyv3l_/cryptogent.sqlite3
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent init
+STDOUT:
+Config: /var/folders/sh/llmqgsmx211cw69lq_0hmjs40000gp/T/cryptogent-tests-h7hyv3l_/cryptogent.toml
+DB:     /var/folders/sh/llmqgsmx211cw69lq_0hmjs40000gp/T/cryptogent-tests-h7hyv3l_/cryptogent.sqlite3
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent status
+STDOUT:
+CryptoGent status:
+- config: /var/folders/sh/llmqgsmx211cw69lq_0hmjs40000gp/T/cryptogent-tests-h7hyv3l_/cryptogent.toml
+- db:     /var/folders/sh/llmqgsmx211cw69lq_0hmjs40000gp/T/cryptogent-tests-h7hyv3l_/cryptogent.sqlite3
+- mode:   MAINNET
+- cached balances: 0
+- cached open orders: 0
+- last start: 2026-03-19T05:48:14+00:00
+- last shutdown: 2026-03-19T05:48:13+00:00
+- last successful sync: None
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent config show
+STDOUT:
+Config: /var/folders/sh/llmqgsmx211cw69lq_0hmjs40000gp/T/cryptogent-tests-h7hyv3l_/cryptogent.toml
+- db_path: /var/folders/sh/llmqgsmx211cw69lq_0hmjs40000gp/T/cryptogent-tests-h7hyv3l_/cryptogent.sqlite3
+- binance_base_url: https://api.binance.com
+- binance_testnet: False
+- binance_timeout_s: 10.0
+- binance_recv_window_ms: 5000
+- binance_tls_verify: False
+- binance_ca_bundle_path: None
+- binance_api_key_set: True
+- binance_api_secret_set: True
+- binance_spot_bnb_burn: None
+- trading_auto_cancel_expired_limit_orders: True
+- trading_monitoring_interval_seconds: None
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent config use-testnet
+STDOUT:
+Updated: /var/folders/sh/llmqgsmx211cw69lq_0hmjs40000gp/T/cryptogent-tests-h7hyv3l_/cryptogent.toml (binance.testnet = true)
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent config use-mainnet
+STDOUT:
+Updated: /var/folders/sh/llmqgsmx211cw69lq_0hmjs40000gp/T/cryptogent-tests-h7hyv3l_/cryptogent.toml (binance.testnet = false)
+--------------------------------------------------------------------------------
+[FAIL(1)] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent config set-binance --api-key DUMMY
+STDERR:
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/tanjim/Tanjim/Languages/Python/tools/CryptoGent/cryptogent/__main__.py", line 4, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/Users/tanjim/Tanjim/Languages/Python/tools/CryptoGent/cryptogent/cli/main.py", line 7571, in main
+    return int(args.fn(args))
+               ~~~~~~~^^^^^^
+  File "/Users/tanjim/Tanjim/Languages/Python/tools/CryptoGent/cryptogent/cli/main.py", line 135, in cmd_config_set_binance
+    if args.testnet or args.base_url:
+       ^^^^^^^^^^^^
+AttributeError: 'Namespace' object has no attribute 'testnet'
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent config set-binance-testnet --api-key DUMMY
+STDOUT:
+Updated: /var/folders/sh/llmqgsmx211cw69lq_0hmjs40000gp/T/cryptogent-tests-h7hyv3l_/cryptogent.toml ([binance_testnet])
+--------------------------------------------------------------------------------
+[FAIL(2)] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent exchange balances
+STDOUT:
+Binance API error (HTTP 401): code=-2015, msg=Invalid API-key, IP, or permissions for action.
+--------------------------------------------------------------------------------
+[FAIL(2)] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent exchange balances --all
+STDOUT:
+Binance API error (HTTP 401): code=-2015, msg=Invalid API-key, IP, or permissions for action.
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent reliability status
+STDOUT:
+Reliability Status
+- automation_paused: False
+- pause_reason: None
+- paused_at_utc: None
+- last_reconciliation_status: None
+- last_successful_sync_time_utc: None
+--------------------------------------------------------------------------------

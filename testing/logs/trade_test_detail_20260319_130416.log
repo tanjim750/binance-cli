@@ -1,0 +1,887 @@
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent init
+STDOUT:
+Config: /Users/tanjim/Tanjim/Languages/Python/tools/CryptoGent/cryptogent.toml
+DB:     cryptogent.sqlite3
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade start --profit-target-pct 2.0 --deadline-hours 24 --budget-mode manual --budget 10.41 --budget-asset USDT --symbol DOGEUSDT --exit-asset USDT --yes
+STDOUT:
+Created trade request id=24 status=DRAFT
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade list
+STDOUT:
+Trade requests: 20
+  ID REQUEST_ID STATUS    SYMBOL     BUDGET              PT%    SL% DEADLINE (UTC)         VALID  
+  24 tr_000024  DRAFT     DOGEUSDT   MANUAL:10.41 US…    2.0    1.0 2026-03-20T07:04:16+0… -      
+  23 tr_000023  DRAFT     DOTUSDT    MANUAL:90 USDT        3      1 2026-03-20T05:58:29+0… VALID  
+  22 tr_000022  DRAFT     AIUSDT     MANUAL:67 USDT        3      1 2026-03-20T03:57:24+0… INVALID
+  21 tr_000021  DRAFT     BTCUSDT    MANUAL:50 USDT      2.0    1.0 2026-03-18T10:56:55+0… -      
+  20 tr_000020  DRAFT     SOLUSDT    MANUAL:57 USDT        3      1 2026-03-20T05:55:41+0… VALID  
+  19 tr_000019  DRAFT     SOLUSDT    MANUAL:78 USDT        2      1 2026-03-19T08:50:11+0… VALID  
+  18 tr_000018  DRAFT     SOLUSDT    MANUAL:100 USDT       3      1 2026-03-17T21:17:02+0… VALID  
+  17 tr_000017  DRAFT     SOLUSDT    MANUAL:50 USDT        2      1 2026-03-17T06:48:24+0… VALID  
+  16 tr_000016  DRAFT     BTCUSDT    MANUAL:30 USDT       80      1 2026-03-15T09:00:55+0… ERROR  
+  15 tr_000015  DRAFT     BTCUSDT    MANUAL:60 USDT       90      1 2026-03-15T08:31:18+0… INVALID
+  14 tr_000014  DRAFT     BTCUSDT    MANUAL:30 USDT       80      1 2026-03-15T08:26:22+0… VALID  
+  13 tr_000013  DRAFT     BTCUSDT    MANUAL:30 USDT       50      1 2026-03-15T08:25:48+0… VALID  
+  12 tr_000012  DRAFT     BTCUSDT    MANUAL:50 USDT       90      1 2026-03-15T08:21:36+0… VALID  
+  11 tr_000011  DRAFT     BTCUSDT    MANUAL:60 USDT       90      3 2026-03-16T07:19:51+0… VALID  
+  10 tr_000010  DRAFT     BTCUSDT    MANUAL:30 USDT        2      1 2026-03-16T07:17:00+0… VALID  
+   9 tr_000009  DRAFT     BTCUSDT    AUTO:USDT             2      1 2026-03-16T07:16:12+0… -      
+   8 tr_000008  DRAFT     BTCUSDT    MANUAL:30 USDT        2      1 2026-03-15T18:01:55+0… VALID  
+   7 tr_000007  DRAFT     BTCUSDT    AUTO:USDT             2    1.0 2026-03-14T19:57:52+0… -      
+   6 -          DRAFT     BTCUSDT    MANUAL:40 USDT        3      1 2026-03-14T19:30:42+0… -      
+   5 -          CANCELLED BTCUSDT    MANUAL:30 30          3      1 2026-03-14T19:25:48+0… -
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade list
+STDOUT:
+Trade requests: 20
+  ID REQUEST_ID STATUS    SYMBOL     BUDGET              PT%    SL% DEADLINE (UTC)         VALID  
+  24 tr_000024  DRAFT     DOGEUSDT   MANUAL:10.41 US…    2.0    1.0 2026-03-20T07:04:16+0… -      
+  23 tr_000023  DRAFT     DOTUSDT    MANUAL:90 USDT        3      1 2026-03-20T05:58:29+0… VALID  
+  22 tr_000022  DRAFT     AIUSDT     MANUAL:67 USDT        3      1 2026-03-20T03:57:24+0… INVALID
+  21 tr_000021  DRAFT     BTCUSDT    MANUAL:50 USDT      2.0    1.0 2026-03-18T10:56:55+0… -      
+  20 tr_000020  DRAFT     SOLUSDT    MANUAL:57 USDT        3      1 2026-03-20T05:55:41+0… VALID  
+  19 tr_000019  DRAFT     SOLUSDT    MANUAL:78 USDT        2      1 2026-03-19T08:50:11+0… VALID  
+  18 tr_000018  DRAFT     SOLUSDT    MANUAL:100 USDT       3      1 2026-03-17T21:17:02+0… VALID  
+  17 tr_000017  DRAFT     SOLUSDT    MANUAL:50 USDT        2      1 2026-03-17T06:48:24+0… VALID  
+  16 tr_000016  DRAFT     BTCUSDT    MANUAL:30 USDT       80      1 2026-03-15T09:00:55+0… ERROR  
+  15 tr_000015  DRAFT     BTCUSDT    MANUAL:60 USDT       90      1 2026-03-15T08:31:18+0… INVALID
+  14 tr_000014  DRAFT     BTCUSDT    MANUAL:30 USDT       80      1 2026-03-15T08:26:22+0… VALID  
+  13 tr_000013  DRAFT     BTCUSDT    MANUAL:30 USDT       50      1 2026-03-15T08:25:48+0… VALID  
+  12 tr_000012  DRAFT     BTCUSDT    MANUAL:50 USDT       90      1 2026-03-15T08:21:36+0… VALID  
+  11 tr_000011  DRAFT     BTCUSDT    MANUAL:60 USDT       90      3 2026-03-16T07:19:51+0… VALID  
+  10 tr_000010  DRAFT     BTCUSDT    MANUAL:30 USDT        2      1 2026-03-16T07:17:00+0… VALID  
+   9 tr_000009  DRAFT     BTCUSDT    AUTO:USDT             2      1 2026-03-16T07:16:12+0… -      
+   8 tr_000008  DRAFT     BTCUSDT    MANUAL:30 USDT        2      1 2026-03-15T18:01:55+0… VALID  
+   7 tr_000007  DRAFT     BTCUSDT    AUTO:USDT             2    1.0 2026-03-14T19:57:52+0… -      
+   6 -          DRAFT     BTCUSDT    MANUAL:40 USDT        3      1 2026-03-14T19:30:42+0… -      
+   5 -          CANCELLED BTCUSDT    MANUAL:30 30          3      1 2026-03-14T19:25:48+0… -
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade show 24
+STDOUT:
+id=24
+request_id=tr_000024
+status=DRAFT
+preferred_symbol=DOGEUSDT
+budget_mode=manual
+budget=10.41 USDT
+exit_asset=USDT
+label=None
+notes=None
+profit_target_pct=2.0
+stop_loss_pct=1.0
+deadline_hours=24
+deadline_utc=2026-03-20T07:04:16+00:00
+validation_status=None
+validation_error=None
+validated_at_utc=None
+last_price=None
+estimated_qty=None
+symbol_base_asset=None
+symbol_quote_asset=None
+created_at_utc=2026-03-19T07:04:16+00:00
+updated_at_utc=2026-03-19T07:04:16+00:00
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade validate 24
+STDOUT:
+VALID: symbol=DOGEUSDT price=0.09470000 est_qty=109.00000000 notional=10.3223000000000000 USDT
+FEASIBILITY: feasibility=high_risk; warnings=volatility_high_risk market_data_env=mainnet_public
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade plan build 24
+STDOUT:
+Trade Planning Summary
+- Plan ID: 11
+- Trade Request ID: 24
+- Request ID: tr_000024
+- Market Data Env: mainnet_public
+- Execution Env: testnet
+- Symbol: DOGEUSDT
+- Feasibility: high_risk
+- Budget Approved: 10.41 USDT
+- Budget Usable: 10.279875 USDT
+- Est. Qty: 108.00000000 (10.2276000000000000 USDT)
+- Signal: AVOID (confidence=0.20)
+- Warnings:
+  - volatility_high_risk
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade plan list
+STDOUT:
+Trade plans: 11
+PLAN_ID REQ_ID     TR_ID SYMBOL     CATEGORY           BUDGET           STATUS             WARN CREATED (UTC)         
+     11 tr_000024     24 DOGEUSDT   high_risk          10.41 USDT       ready_for_validat…    1 2026-03-19T07:04:21+0…
+     10 tr_000023     23 DOTUSDT    feasible_with_war… 90 USDT          ready_for_validat…    2 2026-03-17T18:43:09+0…
+      9 tr_000023     23 DOTUSDT    high_risk          90 USDT          ready_for_validat…    2 2026-03-17T10:58:37+0…
+      8 tr_000020     20 SOLUSDT    high_risk          57 USDT          ready_for_validat…    2 2026-03-17T10:55:58+0…
+      7 tr_000019     19 SOLUSDT    high_risk          78 USDT          ready_for_validat…    2 2026-03-17T10:53:32+0…
+      6 tr_000019     19 SOLUSDT    high_risk          78 USDT          ready_for_validat…    2 2026-03-16T09:17:17+0…
+      5 tr_000017     17 SOLUSDT    high_risk          50 USDT          ready_for_validat…    1 2026-03-16T09:16:43+0…
+      4 tr_000019     19 SOLUSDT    high_risk          78 USDT          ready_for_validat…    2 2026-03-16T08:50:25+0…
+      3 tr_000018     18 SOLUSDT    high_risk          100 USDT         ready_for_validat…    2 2026-03-16T08:18:06+0…
+      2 tr_000017     17 SOLUSDT    high_risk          50 USDT          ready_for_validat…    1 2026-03-16T06:54:35+0…
+      1 tr_000010     10 BTCUSDT    feasible           30 USDT          ready_for_validat…    0 2026-03-15T09:12:49+0…
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade plan list
+STDOUT:
+Trade plans: 11
+PLAN_ID REQ_ID     TR_ID SYMBOL     CATEGORY           BUDGET           STATUS             WARN CREATED (UTC)         
+     11 tr_000024     24 DOGEUSDT   high_risk          10.41 USDT       ready_for_validat…    1 2026-03-19T07:04:21+0…
+     10 tr_000023     23 DOTUSDT    feasible_with_war… 90 USDT          ready_for_validat…    2 2026-03-17T18:43:09+0…
+      9 tr_000023     23 DOTUSDT    high_risk          90 USDT          ready_for_validat…    2 2026-03-17T10:58:37+0…
+      8 tr_000020     20 SOLUSDT    high_risk          57 USDT          ready_for_validat…    2 2026-03-17T10:55:58+0…
+      7 tr_000019     19 SOLUSDT    high_risk          78 USDT          ready_for_validat…    2 2026-03-17T10:53:32+0…
+      6 tr_000019     19 SOLUSDT    high_risk          78 USDT          ready_for_validat…    2 2026-03-16T09:17:17+0…
+      5 tr_000017     17 SOLUSDT    high_risk          50 USDT          ready_for_validat…    1 2026-03-16T09:16:43+0…
+      4 tr_000019     19 SOLUSDT    high_risk          78 USDT          ready_for_validat…    2 2026-03-16T08:50:25+0…
+      3 tr_000018     18 SOLUSDT    high_risk          100 USDT         ready_for_validat…    2 2026-03-16T08:18:06+0…
+      2 tr_000017     17 SOLUSDT    high_risk          50 USDT          ready_for_validat…    1 2026-03-16T06:54:35+0…
+      1 tr_000010     10 BTCUSDT    feasible           30 USDT          ready_for_validat…    0 2026-03-15T09:12:49+0…
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade plan show 11
+STDOUT:
+plan_id=11
+trade_request_id=24
+request_id=tr_000024
+status=ready_for_validation
+feasibility_category=high_risk
+warnings_json=["volatility_high_risk"]
+rejection_reason=None
+market_data_environment=mainnet_public
+execution_environment=testnet
+symbol=DOGEUSDT
+price=0.09470000
+bid=0.09469000
+ask=0.09470000
+spread_pct=0.01056021965256877343048735414
+volume_24h_quote=123059033.18572000
+volatility_pct=6.969376979936642027455121436
+momentum_pct=-4.871923656454043194374686087
+budget_mode=manual
+approved_budget=10.41 USDT
+usable_budget_amount=10.279875
+raw_quantity=108.5520063357972544878563886
+rounded_quantity=108.00000000
+expected_notional=10.2276000000000000
+signal=avoid
+signal_reasons_json=["momentum_negative","volatility_elevated","liquidity_strong","high_risk_category"]
+rules_snapshot_json={"symbol":"DOGEUSDT","status":"TRADING","base_asset":"DOGE","quote_asset":"USDT","step_size":"1.00000000","min_qty":"1.00000000","max_qty":"9000000.00000000","min_notional":"1.00000000","tick_size":"0.00001000","price_source":"ticker_price","price_time_ms":1773903860115,"candle_interval":"5m","candle_count":288,"candle_first_open_time_ms":1773817500000,"candle_last_close_time_ms":1773903899999,"planning_time_utc":"2026-03-19T07:04:21+00:00","market_data_environment":"mainnet_public","execution_environment":"testnet"}
+market_summary_json={"profit_target_pct":"2.0","stop_loss_pct":"1.0","deadline_utc":"2026-03-20T07:04:16+00:00","deadline_hours":24,"volume_24h_quote":"123059033.18572000","volatility_pct":"6.969376979936642027455121436","momentum_pct":"-4.871923656454043194374686087","spread_pct":"0.01056021965256877343048735414","bid":"0.09469000","ask":"0.09470000","balance_source":"request","fee_buffer_pct":"0.25","safety_buffer_pct":"1.0","signal_confidence":"0.20"}
+candidate_list_json=[{"selected":true,"symbol":"DOGEUSDT","reason":"requested"}]
+created_at_utc=2026-03-19T07:04:21+00:00
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade safety 11
+STDOUT:
+Safety Evaluation Summary
+- Plan ID: 11
+- Candidate ID: 27
+- Result: safe
+- Validation: passed
+- Risk: approved
+- Approved Budget: 10.41 USDT
+- Approved Quantity: 108.00000000
+- Summary: Safe to proceed to execution
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade safety 11 --order-type LIMIT_BUY --limit-price 0.09456
+STDOUT:
+Safety Evaluation Summary
+- Plan ID: 11
+- Candidate ID: 28
+- Result: safe
+- Validation: passed
+- Risk: approved
+- Approved Budget: 10.41 USDT
+- Approved Quantity: 108.00000000
+- Summary: Safe to proceed to execution
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent position list
+STDOUT:
+Positions: 4
+POS_ID STATUS   SYMBOL     QTY            ENTRY          MD_ENV        EXEC_ENV
+     4 CLOSED   DOTUSDT    0              1.60100000     mainnet_public testnet
+     3 OPEN     SOLUSDT    0.83716200     93.02000000    mainnet_public mainnet
+     2 CLOSED   SOLUSDT    1.06793100     93.17000000    mainnet_public mainnet
+     1 CLOSED   SOLUSDT    0.00046600     93.60000000    mainnet_public mainnet
+--------------------------------------------------------------------------------
+[FAIL(2)] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade safety 11 --order-type MARKET_SELL --position-id 4 --close-mode all
+STDOUT:
+Safety Evaluation Summary
+- Plan ID: 11
+- Candidate ID: 29
+- Result: unsafe
+- Validation: failed
+- Risk: rejected
+- Approved Quantity: 0
+- Estimated Proceeds: 0E-8 USDT
+- Warnings:
+  - position_fee_asset:DOT
+  - position_fee_amount:0.05621000
+- Errors:
+  - position_not_open
+  - position_symbol_mismatch
+  - sell_qty_rounded_to_zero
+  - min_qty_failed
+  - min_notional_failed
+- Summary: Unsafe: one or more safety checks failed
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent position list
+STDOUT:
+Positions: 4
+POS_ID STATUS   SYMBOL     QTY            ENTRY          MD_ENV        EXEC_ENV
+     4 CLOSED   DOTUSDT    0              1.60100000     mainnet_public testnet
+     3 OPEN     SOLUSDT    0.83716200     93.02000000    mainnet_public mainnet
+     2 CLOSED   SOLUSDT    1.06793100     93.17000000    mainnet_public mainnet
+     1 CLOSED   SOLUSDT    0.00046600     93.60000000    mainnet_public mainnet
+--------------------------------------------------------------------------------
+[FAIL(2)] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade safety 11 --order-type LIMIT_SELL --position-id 4 --close-mode all --limit-price 0.09456
+STDOUT:
+Safety Evaluation Summary
+- Plan ID: 11
+- Candidate ID: 30
+- Result: unsafe
+- Validation: failed
+- Risk: rejected
+- Approved Quantity: 0
+- Estimated Proceeds: 0.00000 USDT
+- Warnings:
+  - position_fee_asset:DOT
+  - position_fee_amount:0.05621000
+  - limit_sell_price_le_live_price
+- Errors:
+  - position_not_open
+  - position_symbol_mismatch
+  - sell_qty_rounded_to_zero
+  - min_qty_failed
+  - min_notional_failed
+- Summary: Unsafe: one or more safety checks failed
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution list
+STDOUT:
+Executions: 12
+EXEC_ID CAND_ID PLAN_ID SYMBOL     TYPE       ENV     STATUS             QUOTE_QTY  LMT_PX     EXEC_QTY     AVG_PRICE      ORDER_ID  
+     12      26      10 DOTUSDT    MARKET_SE… testnet filled             -          -          56.15000000  1.60200000     453079     
+     11      25      10 DOTUSDT    MARKET_BUY testnet filled             90         -          56.21000000  1.60100000     453045     
+     10      24       9 DOTUSDT    LIMIT_BUY  testnet cancelled          90         1.00000    0E-8         -              450130     
+      9      18       6 SOLUSDT    MARKET_BUY testnet filled             78         -          0.83800000   93.02000000    3245248    
+      8      16       4 SOLUSDT    LIMIT_BUY  testnet cancelled          78         92.000000  0E-8         -              3244273    
+      7      15       3 SOLUSDT    MARKET_SE… testnet filled             -          -          1.06700000   92.86000000    3243480    
+      6      13       3 SOLUSDT    LIMIT_BUY  testnet filled             100        93.470000… 1.06900000   93.17000000    3243040    
+      5       8       2 SOLUSDT    MARKET_SE… testnet filled             -          -          0.53300000   93.65000000    3241438    
+      4       5       2 SOLUSDT    MARKET_BUY testnet filled             50         -          0.53400000   93.60000000    3238914    
+      3       2       1 BTCUSDT    LIMIT_BUY  testnet cancelled          30         61829.720… 0E-8         -              17443343   
+      2       1       1 BTCUSDT    MARKET     testnet filled             30         -          0.00041000   71857.53000000 17431311   
+      1       1       1 BTCUSDT    MARKET     testnet filled             30         -          0.00041000   71829.72000000 17427840
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution list
+STDOUT:
+Executions: 12
+EXEC_ID CAND_ID PLAN_ID SYMBOL     TYPE       ENV     STATUS             QUOTE_QTY  LMT_PX     EXEC_QTY     AVG_PRICE      ORDER_ID  
+     12      26      10 DOTUSDT    MARKET_SE… testnet filled             -          -          56.15000000  1.60200000     453079     
+     11      25      10 DOTUSDT    MARKET_BUY testnet filled             90         -          56.21000000  1.60100000     453045     
+     10      24       9 DOTUSDT    LIMIT_BUY  testnet cancelled          90         1.00000    0E-8         -              450130     
+      9      18       6 SOLUSDT    MARKET_BUY testnet filled             78         -          0.83800000   93.02000000    3245248    
+      8      16       4 SOLUSDT    LIMIT_BUY  testnet cancelled          78         92.000000  0E-8         -              3244273    
+      7      15       3 SOLUSDT    MARKET_SE… testnet filled             -          -          1.06700000   92.86000000    3243480    
+      6      13       3 SOLUSDT    LIMIT_BUY  testnet filled             100        93.470000… 1.06900000   93.17000000    3243040    
+      5       8       2 SOLUSDT    MARKET_SE… testnet filled             -          -          0.53300000   93.65000000    3241438    
+      4       5       2 SOLUSDT    MARKET_BUY testnet filled             50         -          0.53400000   93.60000000    3238914    
+      3       2       1 BTCUSDT    LIMIT_BUY  testnet cancelled          30         61829.720… 0E-8         -              17443343   
+      2       1       1 BTCUSDT    MARKET     testnet filled             30         -          0.00041000   71857.53000000 17431311   
+      1       1       1 BTCUSDT    MARKET     testnet filled             30         -          0.00041000   71829.72000000 17427840
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 12
+STDOUT:
+execution_id=12
+candidate_id=26
+plan_id=10
+trade_request_id=23
+symbol=DOTUSDT
+side=SELL
+order_type=MARKET_SELL
+execution_environment=testnet
+client_order_id=cg_26_20260317T185033Z_801d
+binance_order_id=453079
+quote_order_qty=None
+limit_price=None
+time_in_force=None
+requested_quantity=56.15000000
+executed_quantity=56.15000000
+avg_fill_price=1.60200000
+total_quote_spent=89.9523000000000000
+commission_total=0.08995230
+commission_asset=USDT
+fee_breakdown_json={"USDT":"0.08995230"}
+realized_pnl_quote=-0.0338023000000000
+realized_pnl_quote_asset=USDT
+pnl_warnings_json=None
+fills_count=1
+local_status=filled
+raw_status=FILLED
+retry_count=0
+submitted_at_utc=2026-03-17T18:50:33+00:00
+reconciled_at_utc=2026-03-17T18:50:33+00:00
+expired_at_utc=None
+created_at_utc=2026-03-17T18:50:33+00:00
+updated_at_utc=2026-03-17T18:50:33+00:00
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution list
+STDOUT:
+Executions: 12
+EXEC_ID CAND_ID PLAN_ID SYMBOL     TYPE       ENV     STATUS             QUOTE_QTY  LMT_PX     EXEC_QTY     AVG_PRICE      ORDER_ID  
+     12      26      10 DOTUSDT    MARKET_SE… testnet filled             -          -          56.15000000  1.60200000     453079     
+     11      25      10 DOTUSDT    MARKET_BUY testnet filled             90         -          56.21000000  1.60100000     453045     
+     10      24       9 DOTUSDT    LIMIT_BUY  testnet cancelled          90         1.00000    0E-8         -              450130     
+      9      18       6 SOLUSDT    MARKET_BUY testnet filled             78         -          0.83800000   93.02000000    3245248    
+      8      16       4 SOLUSDT    LIMIT_BUY  testnet cancelled          78         92.000000  0E-8         -              3244273    
+      7      15       3 SOLUSDT    MARKET_SE… testnet filled             -          -          1.06700000   92.86000000    3243480    
+      6      13       3 SOLUSDT    LIMIT_BUY  testnet filled             100        93.470000… 1.06900000   93.17000000    3243040    
+      5       8       2 SOLUSDT    MARKET_SE… testnet filled             -          -          0.53300000   93.65000000    3241438    
+      4       5       2 SOLUSDT    MARKET_BUY testnet filled             50         -          0.53400000   93.60000000    3238914    
+      3       2       1 BTCUSDT    LIMIT_BUY  testnet cancelled          30         61829.720… 0E-8         -              17443343   
+      2       1       1 BTCUSDT    MARKET     testnet filled             30         -          0.00041000   71857.53000000 17431311   
+      1       1       1 BTCUSDT    MARKET     testnet filled             30         -          0.00041000   71829.72000000 17427840
+--------------------------------------------------------------------------------
+[FAIL(2)] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution cancel 12
+STDOUT:
+Not supported: only LIMIT_BUY / LIMIT_SELL executions can be cancelled.
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade list
+STDOUT:
+Trade requests: 20
+  ID REQUEST_ID STATUS    SYMBOL     BUDGET              PT%    SL% DEADLINE (UTC)         VALID  
+  24 tr_000024  DRAFT     DOGEUSDT   MANUAL:10.41 US…    2.0    1.0 2026-03-20T07:04:16+0… VALID  
+  23 tr_000023  DRAFT     DOTUSDT    MANUAL:90 USDT        3      1 2026-03-20T05:58:29+0… VALID  
+  22 tr_000022  DRAFT     AIUSDT     MANUAL:67 USDT        3      1 2026-03-20T03:57:24+0… INVALID
+  21 tr_000021  DRAFT     BTCUSDT    MANUAL:50 USDT      2.0    1.0 2026-03-18T10:56:55+0… -      
+  20 tr_000020  DRAFT     SOLUSDT    MANUAL:57 USDT        3      1 2026-03-20T05:55:41+0… VALID  
+  19 tr_000019  DRAFT     SOLUSDT    MANUAL:78 USDT        2      1 2026-03-19T08:50:11+0… VALID  
+  18 tr_000018  DRAFT     SOLUSDT    MANUAL:100 USDT       3      1 2026-03-17T21:17:02+0… VALID  
+  17 tr_000017  DRAFT     SOLUSDT    MANUAL:50 USDT        2      1 2026-03-17T06:48:24+0… VALID  
+  16 tr_000016  DRAFT     BTCUSDT    MANUAL:30 USDT       80      1 2026-03-15T09:00:55+0… ERROR  
+  15 tr_000015  DRAFT     BTCUSDT    MANUAL:60 USDT       90      1 2026-03-15T08:31:18+0… INVALID
+  14 tr_000014  DRAFT     BTCUSDT    MANUAL:30 USDT       80      1 2026-03-15T08:26:22+0… VALID  
+  13 tr_000013  DRAFT     BTCUSDT    MANUAL:30 USDT       50      1 2026-03-15T08:25:48+0… VALID  
+  12 tr_000012  DRAFT     BTCUSDT    MANUAL:50 USDT       90      1 2026-03-15T08:21:36+0… VALID  
+  11 tr_000011  DRAFT     BTCUSDT    MANUAL:60 USDT       90      3 2026-03-16T07:19:51+0… VALID  
+  10 tr_000010  DRAFT     BTCUSDT    MANUAL:30 USDT        2      1 2026-03-16T07:17:00+0… VALID  
+   9 tr_000009  DRAFT     BTCUSDT    AUTO:USDT             2      1 2026-03-16T07:16:12+0… -      
+   8 tr_000008  DRAFT     BTCUSDT    MANUAL:30 USDT        2      1 2026-03-15T18:01:55+0… VALID  
+   7 tr_000007  DRAFT     BTCUSDT    AUTO:USDT             2    1.0 2026-03-14T19:57:52+0… -      
+   6 -          DRAFT     BTCUSDT    MANUAL:40 USDT        3      1 2026-03-14T19:30:42+0… -      
+   5 -          CANCELLED BTCUSDT    MANUAL:30 30          3      1 2026-03-14T19:25:48+0… -
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 24
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 23
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 22
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 21
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 20
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 19
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 18
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 17
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 16
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 15
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 14
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 13
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 12
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 11
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 10
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 9
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 8
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 7
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 6
+STDOUT:
+Cancelled
+--------------------------------------------------------------------------------
+[FAIL(2)] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 5
+STDOUT:
+Not cancelled (not found or not NEW)
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution list
+STDOUT:
+Executions: 12
+EXEC_ID CAND_ID PLAN_ID SYMBOL     TYPE       ENV     STATUS             QUOTE_QTY  LMT_PX     EXEC_QTY     AVG_PRICE      ORDER_ID  
+     12      26      10 DOTUSDT    MARKET_SE… testnet filled             -          -          56.15000000  1.60200000     453079     
+     11      25      10 DOTUSDT    MARKET_BUY testnet filled             90         -          56.21000000  1.60100000     453045     
+     10      24       9 DOTUSDT    LIMIT_BUY  testnet cancelled          90         1.00000    0E-8         -              450130     
+      9      18       6 SOLUSDT    MARKET_BUY testnet filled             78         -          0.83800000   93.02000000    3245248    
+      8      16       4 SOLUSDT    LIMIT_BUY  testnet cancelled          78         92.000000  0E-8         -              3244273    
+      7      15       3 SOLUSDT    MARKET_SE… testnet filled             -          -          1.06700000   92.86000000    3243480    
+      6      13       3 SOLUSDT    LIMIT_BUY  testnet filled             100        93.470000… 1.06900000   93.17000000    3243040    
+      5       8       2 SOLUSDT    MARKET_SE… testnet filled             -          -          0.53300000   93.65000000    3241438    
+      4       5       2 SOLUSDT    MARKET_BUY testnet filled             50         -          0.53400000   93.60000000    3238914    
+      3       2       1 BTCUSDT    LIMIT_BUY  testnet cancelled          30         61829.720… 0E-8         -              17443343   
+      2       1       1 BTCUSDT    MARKET     testnet filled             30         -          0.00041000   71857.53000000 17431311   
+      1       1       1 BTCUSDT    MARKET     testnet filled             30         -          0.00041000   71829.72000000 17427840
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 12
+STDOUT:
+execution_id=12
+candidate_id=26
+plan_id=10
+trade_request_id=23
+symbol=DOTUSDT
+side=SELL
+order_type=MARKET_SELL
+execution_environment=testnet
+client_order_id=cg_26_20260317T185033Z_801d
+binance_order_id=453079
+quote_order_qty=None
+limit_price=None
+time_in_force=None
+requested_quantity=56.15000000
+executed_quantity=56.15000000
+avg_fill_price=1.60200000
+total_quote_spent=89.9523000000000000
+commission_total=0.08995230
+commission_asset=USDT
+fee_breakdown_json={"USDT":"0.08995230"}
+realized_pnl_quote=-0.0338023000000000
+realized_pnl_quote_asset=USDT
+pnl_warnings_json=None
+fills_count=1
+local_status=filled
+raw_status=FILLED
+retry_count=0
+submitted_at_utc=2026-03-17T18:50:33+00:00
+reconciled_at_utc=2026-03-17T18:50:33+00:00
+expired_at_utc=None
+created_at_utc=2026-03-17T18:50:33+00:00
+updated_at_utc=2026-03-17T18:50:33+00:00
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 11
+STDOUT:
+execution_id=11
+candidate_id=25
+plan_id=10
+trade_request_id=23
+symbol=DOTUSDT
+side=BUY
+order_type=MARKET_BUY
+execution_environment=testnet
+client_order_id=cg_25_20260317T184449Z_4148
+binance_order_id=453045
+quote_order_qty=90
+limit_price=None
+time_in_force=None
+requested_quantity=None
+executed_quantity=56.21000000
+avg_fill_price=1.60100000
+total_quote_spent=89.9922100000000000
+commission_total=0.05621000
+commission_asset=DOT
+fee_breakdown_json=None
+realized_pnl_quote=None
+realized_pnl_quote_asset=None
+pnl_warnings_json=None
+fills_count=1
+local_status=filled
+raw_status=FILLED
+retry_count=0
+submitted_at_utc=2026-03-17T18:44:50+00:00
+reconciled_at_utc=2026-03-17T18:44:50+00:00
+expired_at_utc=None
+created_at_utc=2026-03-17T18:44:49+00:00
+updated_at_utc=2026-03-17T18:44:50+00:00
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 10
+STDOUT:
+execution_id=10
+candidate_id=24
+plan_id=9
+trade_request_id=23
+symbol=DOTUSDT
+side=BUY
+order_type=LIMIT_BUY
+execution_environment=testnet
+client_order_id=cg_24_20260317T105908Z_66ea
+binance_order_id=450130
+quote_order_qty=90
+limit_price=1.00000
+time_in_force=GTC
+requested_quantity=90.00000
+executed_quantity=0E-8
+avg_fill_price=None
+total_quote_spent=0E-8
+commission_total=None
+commission_asset=None
+fee_breakdown_json=None
+realized_pnl_quote=None
+realized_pnl_quote_asset=None
+pnl_warnings_json=None
+fills_count=0
+local_status=cancelled
+raw_status=CANCELED
+retry_count=0
+submitted_at_utc=2026-03-17T10:59:09+00:00
+reconciled_at_utc=2026-03-17T17:14:25+00:00
+expired_at_utc=2026-03-17T16:26:38+00:00
+created_at_utc=2026-03-17T10:59:08+00:00
+updated_at_utc=2026-03-17T17:14:25+00:00
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 9
+STDOUT:
+execution_id=9
+candidate_id=18
+plan_id=6
+trade_request_id=19
+symbol=SOLUSDT
+side=BUY
+order_type=MARKET_BUY
+execution_environment=testnet
+client_order_id=cg_18_20260316T091755Z_e79c
+binance_order_id=3245248
+quote_order_qty=78
+limit_price=None
+time_in_force=None
+requested_quantity=None
+executed_quantity=0.83800000
+avg_fill_price=93.02000000
+total_quote_spent=77.9507600000000000
+commission_total=0.00083800
+commission_asset=SOL
+fee_breakdown_json=None
+realized_pnl_quote=None
+realized_pnl_quote_asset=None
+pnl_warnings_json=None
+fills_count=1
+local_status=filled
+raw_status=FILLED
+retry_count=0
+submitted_at_utc=2026-03-16T09:17:55+00:00
+reconciled_at_utc=2026-03-16T09:17:55+00:00
+expired_at_utc=None
+created_at_utc=2026-03-16T09:17:55+00:00
+updated_at_utc=2026-03-16T09:17:55+00:00
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 8
+STDOUT:
+execution_id=8
+candidate_id=16
+plan_id=4
+trade_request_id=19
+symbol=SOLUSDT
+side=BUY
+order_type=LIMIT_BUY
+execution_environment=testnet
+client_order_id=cg_16_20260316T085231Z_3abd
+binance_order_id=3244273
+quote_order_qty=78
+limit_price=92.000000
+time_in_force=GTC
+requested_quantity=0.84700000
+executed_quantity=0E-8
+avg_fill_price=None
+total_quote_spent=0E-8
+commission_total=None
+commission_asset=None
+fee_breakdown_json=None
+realized_pnl_quote=None
+realized_pnl_quote_asset=None
+pnl_warnings_json=None
+fills_count=0
+local_status=cancelled
+raw_status=CANCELED
+retry_count=0
+submitted_at_utc=2026-03-16T08:52:32+00:00
+reconciled_at_utc=2026-03-17T17:14:26+00:00
+expired_at_utc=2026-03-17T09:39:47+00:00
+created_at_utc=2026-03-16T08:52:31+00:00
+updated_at_utc=2026-03-17T17:14:26+00:00
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 7
+STDOUT:
+execution_id=7
+candidate_id=15
+plan_id=3
+trade_request_id=18
+symbol=SOLUSDT
+side=SELL
+order_type=MARKET_SELL
+execution_environment=testnet
+client_order_id=cg_15_20260316T084010Z_5c91
+binance_order_id=3243480
+quote_order_qty=None
+limit_price=None
+time_in_force=None
+requested_quantity=1.06700000
+executed_quantity=1.06700000
+avg_fill_price=92.86000000
+total_quote_spent=99.0816200000000000
+commission_total=0.09908162
+commission_asset=USDT
+fee_breakdown_json=None
+realized_pnl_quote=None
+realized_pnl_quote_asset=None
+pnl_warnings_json=None
+fills_count=1
+local_status=filled
+raw_status=FILLED
+retry_count=0
+submitted_at_utc=2026-03-16T08:40:10+00:00
+reconciled_at_utc=2026-03-16T08:40:10+00:00
+expired_at_utc=None
+created_at_utc=2026-03-16T08:40:10+00:00
+updated_at_utc=2026-03-16T08:40:10+00:00
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 6
+STDOUT:
+execution_id=6
+candidate_id=13
+plan_id=3
+trade_request_id=18
+symbol=SOLUSDT
+side=BUY
+order_type=LIMIT_BUY
+execution_environment=testnet
+client_order_id=cg_13_20260316T083132Z_d266
+binance_order_id=3243040
+quote_order_qty=100
+limit_price=93.47000000
+time_in_force=GTC
+requested_quantity=1.06900000
+executed_quantity=1.06900000
+avg_fill_price=93.17000000
+total_quote_spent=99.5987300000000000
+commission_total=0.00106900
+commission_asset=SOL
+fee_breakdown_json=None
+realized_pnl_quote=None
+realized_pnl_quote_asset=None
+pnl_warnings_json=None
+fills_count=1
+local_status=filled
+raw_status=FILLED
+retry_count=0
+submitted_at_utc=2026-03-16T08:31:32+00:00
+reconciled_at_utc=2026-03-16T08:31:32+00:00
+expired_at_utc=None
+created_at_utc=2026-03-16T08:31:32+00:00
+updated_at_utc=2026-03-16T08:31:32+00:00
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 5
+STDOUT:
+execution_id=5
+candidate_id=8
+plan_id=2
+trade_request_id=17
+symbol=SOLUSDT
+side=SELL
+order_type=MARKET_SELL
+execution_environment=testnet
+client_order_id=cg_8_20260316T080027Z_040c
+binance_order_id=3241438
+quote_order_qty=None
+limit_price=None
+time_in_force=None
+requested_quantity=0.53300000
+executed_quantity=0.53300000
+avg_fill_price=93.65000000
+total_quote_spent=49.9154500000000000
+commission_total=0.04991545
+commission_asset=USDT
+fee_breakdown_json=None
+realized_pnl_quote=None
+realized_pnl_quote_asset=None
+pnl_warnings_json=None
+fills_count=1
+local_status=filled
+raw_status=FILLED
+retry_count=0
+submitted_at_utc=2026-03-16T08:00:28+00:00
+reconciled_at_utc=2026-03-16T08:00:28+00:00
+expired_at_utc=None
+created_at_utc=2026-03-16T08:00:27+00:00
+updated_at_utc=2026-03-16T08:00:28+00:00
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 4
+STDOUT:
+execution_id=4
+candidate_id=5
+plan_id=2
+trade_request_id=17
+symbol=SOLUSDT
+side=BUY
+order_type=MARKET_BUY
+execution_environment=testnet
+client_order_id=cg_5_20260316T065606Z_0670
+binance_order_id=3238914
+quote_order_qty=50
+limit_price=None
+time_in_force=None
+requested_quantity=None
+executed_quantity=0.53400000
+avg_fill_price=93.60000000
+total_quote_spent=49.9824000000000000
+commission_total=0.00053400
+commission_asset=SOL
+fee_breakdown_json=None
+realized_pnl_quote=None
+realized_pnl_quote_asset=None
+pnl_warnings_json=None
+fills_count=1
+local_status=filled
+raw_status=FILLED
+retry_count=0
+submitted_at_utc=2026-03-16T06:56:09+00:00
+reconciled_at_utc=2026-03-16T06:56:09+00:00
+expired_at_utc=None
+created_at_utc=2026-03-16T06:56:06+00:00
+updated_at_utc=2026-03-16T06:56:09+00:00
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 3
+STDOUT:
+execution_id=3
+candidate_id=2
+plan_id=1
+trade_request_id=10
+symbol=BTCUSDT
+side=BUY
+order_type=LIMIT_BUY
+execution_environment=testnet
+client_order_id=cg_2_20260315T095437Z_0be4
+binance_order_id=17443343
+quote_order_qty=30
+limit_price=61829.72000000
+time_in_force=GTC
+requested_quantity=0.00048000
+executed_quantity=0E-8
+avg_fill_price=None
+total_quote_spent=0E-8
+commission_total=None
+commission_asset=None
+fee_breakdown_json=None
+realized_pnl_quote=None
+realized_pnl_quote_asset=None
+pnl_warnings_json=None
+fills_count=0
+local_status=cancelled
+raw_status=CANCELED
+retry_count=0
+submitted_at_utc=2026-03-15T09:54:37+00:00
+reconciled_at_utc=2026-03-15T10:15:57+00:00
+expired_at_utc=None
+created_at_utc=2026-03-15T09:54:37+00:00
+updated_at_utc=2026-03-15T10:15:57+00:00
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 2
+STDOUT:
+execution_id=2
+candidate_id=1
+plan_id=1
+trade_request_id=10
+symbol=BTCUSDT
+side=BUY
+order_type=MARKET
+execution_environment=testnet
+client_order_id=cg_1_20260315T092241Z_e133
+binance_order_id=17431311
+quote_order_qty=30
+limit_price=None
+time_in_force=None
+requested_quantity=None
+executed_quantity=0.00041000
+avg_fill_price=71857.53000000
+total_quote_spent=29.4615873000000000
+commission_total=4.1E-7
+commission_asset=BTC
+fee_breakdown_json=None
+realized_pnl_quote=None
+realized_pnl_quote_asset=None
+pnl_warnings_json=None
+fills_count=1
+local_status=filled
+raw_status=FILLED
+retry_count=0
+submitted_at_utc=2026-03-15T09:22:42+00:00
+reconciled_at_utc=2026-03-15T09:22:42+00:00
+expired_at_utc=None
+created_at_utc=2026-03-15T09:22:41+00:00
+updated_at_utc=2026-03-15T09:22:42+00:00
+--------------------------------------------------------------------------------
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 1
+STDOUT:
+execution_id=1
+candidate_id=1
+plan_id=1
+trade_request_id=10
+symbol=BTCUSDT
+side=BUY
+order_type=MARKET
+execution_environment=testnet
+client_order_id=cg_1_20260315T091431Z_6ad7
+binance_order_id=17427840
+quote_order_qty=30
+limit_price=None
+time_in_force=None
+requested_quantity=None
+executed_quantity=0.00041000
+avg_fill_price=71829.72000000
+total_quote_spent=29.4501852000000000
+commission_total=4.1E-7
+commission_asset=BTC
+fee_breakdown_json=None
+realized_pnl_quote=None
+realized_pnl_quote_asset=None
+pnl_warnings_json=None
+fills_count=1
+local_status=filled
+raw_status=FILLED
+retry_count=0
+submitted_at_utc=2026-03-15T09:14:31+00:00
+reconciled_at_utc=2026-03-15T09:14:31+00:00
+expired_at_utc=None
+created_at_utc=2026-03-15T09:14:31+00:00
+updated_at_utc=2026-03-15T09:14:31+00:00
+--------------------------------------------------------------------------------

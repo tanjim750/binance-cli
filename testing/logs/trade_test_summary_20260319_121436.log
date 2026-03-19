@@ -1,0 +1,20 @@
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent init
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade start --profit-target-pct 2.0 --deadline-hours 24 --budget-mode manual --budget 45.51 --budget-asset USDT --symbol SOLUSDT --exit-asset USDT --yes
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade list
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade list
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade show 1
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade validate 1
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade plan build 1
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade plan list
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade plan list
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade plan show 1
+[FAIL(2)] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade safety 1
+[FAIL(2)] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade safety 1 --order-type LIMIT_BUY --limit-price 89.75
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent position list
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent position list
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution list
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution list
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution list
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade list
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 1
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution list

@@ -1,0 +1,55 @@
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent init
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade start --profit-target-pct 2.0 --deadline-hours 24 --budget-mode manual --budget 10.41 --budget-asset USDT --symbol DOGEUSDT --exit-asset USDT --yes
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade list
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade list
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade show 24
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade validate 24
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade plan build 24
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade plan list
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade plan list
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade plan show 11
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade safety 11
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade safety 11 --order-type LIMIT_BUY --limit-price 0.09456
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent position list
+[FAIL(2)] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade safety 11 --order-type MARKET_SELL --position-id 4 --close-mode all
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent position list
+[FAIL(2)] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade safety 11 --order-type LIMIT_SELL --position-id 4 --close-mode all --limit-price 0.09456
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution list
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution list
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 12
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution list
+[FAIL(2)] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution cancel 12
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade list
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 24
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 23
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 22
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 21
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 20
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 19
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 18
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 17
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 16
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 15
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 14
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 13
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 12
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 11
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 10
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 9
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 8
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 7
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 6
+[FAIL(2)] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade cancel 5
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution list
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 12
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 11
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 10
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 9
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 8
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 7
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 6
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 5
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 4
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 3
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 2
+[OK] /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m cryptogent trade execution show 1

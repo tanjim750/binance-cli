@@ -1,0 +1,16 @@
+[app]
+db_path = "cryptogent.sqlite3"
+
+[binance]
+# Prefer env vars instead of storing secrets here.
+spot_bnb_burn = false
+testnet = true
+base_url = "https://testnet.binance.vision"
+api_key = "SgcrDvZKlFpJ1BN1FMvlRWNA4zwqSFkWAVSAhkjaFETnuVBPiHd85BDOXFnrRJeb"
+api_secret = "CA2KUEY8eyOEcXN19DMZjJTREX6DHHYvvqQGQuRC9jAKugv0lAK3hiDrSLmlkP0R"
+tls_verify = false
+
+[binance_testnet]
+api_secret = "BtWiHgQd2AA9wtGsI1iWpeagu0ZCauUivX8up6rPSNPBts7iDvNTBktxDNNeljKh"
+api_key = "2SDy6NOPqEarDqKSQJWSEbsnAqlLKr7LXQz8vKMOw0FX9QuPusD5RpifaXe5Xpix"
+

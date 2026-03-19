@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cryptogent"
+version = "0.1.0"
+description = "Local, safety-first Binance Spot trading agent (LLM advisory only)."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Tanjim Abubokor" }]
+dependencies = []
+
+[project.scripts]
+cryptogent = "cryptogent.cli.main:main"
+
+[tool.setuptools]
+package-dir = { "" = "." }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cryptogent*"]
+
