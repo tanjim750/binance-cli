@@ -5,7 +5,7 @@ from pathlib import Path
 from cryptogent.config.io import DEFAULT_DB_PATH, load_config
 from cryptogent.db.connection import connect
 
-TARGET_SCHEMA_VERSION = 28
+TARGET_SCHEMA_VERSION = 34
 
 
 def _read_schema_sql() -> str:
@@ -791,6 +791,212 @@ def _migrate_to_v28(conn) -> None:
     _add_column_if_missing(conn, "execution_candidates", "position_id", "position_id INTEGER")
     _add_column_if_missing(conn, "executions", "position_id", "position_id INTEGER")
 
+
+def _migrate_to_v29(conn) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS market_snapshots (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          symbol TEXT NOT NULL,
+          timeframe TEXT NOT NULL,
+          captured_at_utc TEXT NOT NULL,
+          last_price TEXT NOT NULL,
+          bid TEXT,
+          ask TEXT,
+          spread_pct TEXT,
+          change_percent TEXT,
+          volume_quote TEXT,
+          indicators_json TEXT,
+          condition_summary TEXT,
+          enabled_flags TEXT,
+          config_hash TEXT
+        )
+        """
+    )
+
+
+def _migrate_to_v30(conn) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS fear_greed_index (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          value TEXT NOT NULL,
+          value_classification TEXT NOT NULL,
+          timestamp_utc TEXT NOT NULL,
+          time_until_update_s INTEGER,
+          source TEXT NOT NULL DEFAULT 'alternative.me',
+          raw_json TEXT NOT NULL,
+          created_at_utc TEXT NOT NULL,
+          updated_at_utc TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_fear_greed_source_ts ON fear_greed_index(source, timestamp_utc)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_fear_greed_created ON fear_greed_index(created_at_utc)")
+
+
+def _migrate_to_v31(conn) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS news_articles (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          provider TEXT NOT NULL,
+          provider_article_id TEXT NOT NULL,
+          request_kind TEXT NOT NULL,
+          request_params_json TEXT,
+          title TEXT NOT NULL,
+          description TEXT,
+          content TEXT,
+          url TEXT NOT NULL,
+          image_url TEXT,
+          published_at_utc TEXT NOT NULL,
+          lang TEXT,
+          source_id TEXT,
+          source_name TEXT,
+          source_url TEXT,
+          source_country TEXT,
+          fetched_at_utc TEXT NOT NULL,
+          raw_json TEXT NOT NULL,
+          created_at_utc TEXT NOT NULL,
+          updated_at_utc TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_news_provider_article ON news_articles(provider, provider_article_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_news_published ON news_articles(published_at_utc)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_news_provider ON news_articles(provider)")
+
+
+def _migrate_to_v32(conn) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS telegram_channel_state (
+          channel TEXT NOT NULL PRIMARY KEY,
+          last_message_id INTEGER,
+          last_synced_at_utc TEXT,
+          created_at_utc TEXT NOT NULL,
+          updated_at_utc TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS telegram_messages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          channel TEXT NOT NULL,
+          message_id INTEGER NOT NULL,
+          published_at_utc TEXT NOT NULL,
+          text TEXT,
+          views INTEGER,
+          forwards INTEGER,
+          has_media INTEGER NOT NULL DEFAULT 0,
+          source_type TEXT,
+          sentiment_score REAL,
+          impact_score REAL,
+          event_hash TEXT,
+          raw_json TEXT NOT NULL,
+          created_at_utc TEXT NOT NULL,
+          updated_at_utc TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_telegram_channel_message ON telegram_messages(channel, message_id)"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_telegram_event_hash ON telegram_messages(event_hash)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_telegram_published ON telegram_messages(published_at_utc)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_telegram_channel ON telegram_messages(channel)"
+    )
+
+
+def _migrate_to_v33(conn) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS youtube_channel_state (
+          channel_id TEXT NOT NULL PRIMARY KEY,
+          channel_name TEXT,
+          last_video_published_at_utc TEXT,
+          last_synced_at_utc TEXT,
+          created_at_utc TEXT NOT NULL,
+          updated_at_utc TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS youtube_discovery_state (
+          discovery_key TEXT NOT NULL PRIMARY KEY,
+          last_published_at_utc TEXT,
+          last_synced_at_utc TEXT,
+          created_at_utc TEXT NOT NULL,
+          updated_at_utc TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS youtube_videos (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          video_id TEXT NOT NULL,
+          channel_id TEXT NOT NULL,
+          channel_title TEXT,
+          title TEXT NOT NULL,
+          description TEXT,
+          published_at_utc TEXT NOT NULL,
+          tags_json TEXT,
+          view_count INTEGER,
+          like_count INTEGER,
+          comment_count INTEGER,
+          topic_labels_json TEXT,
+          sentiment_score REAL,
+          impact_score REAL,
+          source_type TEXT,
+          raw_json TEXT NOT NULL,
+          created_at_utc TEXT NOT NULL,
+          updated_at_utc TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS youtube_comments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          video_id TEXT NOT NULL,
+          comment_id TEXT NOT NULL,
+          published_at_utc TEXT NOT NULL,
+          text TEXT,
+          like_count INTEGER,
+          reply_count INTEGER,
+          author_channel_id TEXT,
+          source_type TEXT,
+          topic_labels_json TEXT,
+          sentiment_score REAL,
+          impact_score REAL,
+          raw_json TEXT NOT NULL,
+          created_at_utc TEXT NOT NULL,
+          updated_at_utc TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_youtube_video_id ON youtube_videos(video_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_youtube_channel_id ON youtube_videos(channel_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_youtube_published ON youtube_videos(published_at_utc)")
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_youtube_comment_id ON youtube_comments(comment_id)"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_youtube_comment_video ON youtube_comments(video_id)")
+
+
+def _migrate_to_v34(conn) -> None:
+    _add_column_if_missing(conn, "youtube_videos", "topic_labels_json", "topic_labels_json TEXT")
+    _add_column_if_missing(conn, "youtube_videos", "sentiment_score", "sentiment_score REAL")
+    _add_column_if_missing(conn, "youtube_videos", "impact_score", "impact_score REAL")
+    _add_column_if_missing(conn, "youtube_videos", "source_type", "source_type TEXT")
 def ensure_db_initialized(*, config_path: Path, db_path: Path | None) -> Path:
     cfg = load_config(config_path)
     resolved_db_path = (db_path or cfg.db_path or DEFAULT_DB_PATH).expanduser()
@@ -856,6 +1062,18 @@ def ensure_db_initialized(*, config_path: Path, db_path: Path | None) -> Path:
             _migrate_to_v27(conn)
         if current < 28:
             _migrate_to_v28(conn)
+        if current < 29:
+            _migrate_to_v29(conn)
+        if current < 30:
+            _migrate_to_v30(conn)
+        if current < 31:
+            _migrate_to_v31(conn)
+        if current < 32:
+            _migrate_to_v32(conn)
+        if current < 33:
+            _migrate_to_v33(conn)
+        if current < 34:
+            _migrate_to_v34(conn)
         conn.execute(
             "INSERT OR REPLACE INTO app_meta(key, value) VALUES(?, ?)",
             ("schema_version", str(TARGET_SCHEMA_VERSION)),

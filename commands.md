@@ -84,6 +84,9 @@ Also supports: `--ca-bundle`, `--insecure`, `--testnet`, `--base-url`.
 - `cryptogent sync open-orders [--symbol BTCUSDT]`  
   Sync open orders into SQLite (optionally filter by symbol).
 
+- `cryptogent sync fear-greed`  
+  Fetch and store the latest Fear & Greed Index reading (Alternative.me) into SQLite.
+
 ## Show (reads from SQLite; no network)
 
 - `cryptogent show balances [--all] [--limit N]`  
@@ -94,6 +97,9 @@ Also supports: `--ca-bundle`, `--insecure`, `--testnet`, `--base-url`.
 
 - `cryptogent show open-orders [--symbol BTCUSDT] [--limit N]`  
   Print cached open orders from SQLite (includes `src=execution|manual|external`).
+
+- `cryptogent show fear-greed [--limit N]`  
+  Print cached Fear & Greed Index readings from SQLite.
 
 - `cryptogent show audit [--limit N]`  
   Print recent audit log entries from SQLite (latest first).
@@ -268,6 +274,51 @@ All loop commands that can submit/cancel require `--i-am-human`. Use `--dry-run`
 
 - `cryptogent monitor events list [--limit N]`  
   List monitoring event history (includes decision + reason code).
+
+## Market (Phase 13; basic)
+
+- `cryptogent market status --symbol <SYM> --timeframe <TF> [--limit N] [--market-env mainnet_public|testnet]`  
+  Basic market status for a single timeframe (price, bid/ask, spread, 24h stats, and condition summary).
+  Timeframes include: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 1w, 1M.
+  Options:
+  - `--json` output JSON only
+  - `--compact` single-line output
+  - `--table` key/value table
+  - `--cache 5s|60|1m|1h` cache TTL (uses recent saved snapshot when available)
+  - `--save-snapshot` persist snapshot
+  - `--profile quick|trend|full` apply a preset analysis bundle
+  - `--momentum` include RSI/MACD/Stoch RSI
+  - `--trend` include EMA/SMA + crossovers
+  - `--volatility` include ATR + Bollinger
+  - `--volume` include volume + order book summary
+  - `--structure` include BOS/CHOCH + range/accumulation
+  - `--price-action` include support/resistance, breakout, and candlestick patterns
+  - `--execution` include execution-quality metrics (spread/slippage/depth)
+  - `--risk` include risk sizing (stop/TP/position size/leverage)
+  - `--quant` include quant metrics (correlation/stat signals/ML features)
+  - `--crypto` include funding rate + open interest (auto USDT‑M vs COIN‑M)
+  - `--risk-side long|short` side for risk sizing (default long)
+  - `--risk-entry P` override entry price for risk sizing
+  - `--risk-pct X` risk % of account (default 1)
+  - `--risk-account-balance Q` account balance to use for sizing (quote)
+  - `--risk-max-position-pct X` max position % cap (default 20)
+  - `--volume-depth N` order book depth for liquidity metrics (default from config)
+  - `--volume-window-fast N` fast volume MA window
+  - `--volume-window-slow N` slow volume MA window
+  - `--volume-spike-ratio X` spike ratio threshold
+  - `--volume-zscore X` z-score spike threshold
+  - `--volume-buy-ratio X` taker buy ratio for buy pressure
+  - `--volume-sell-ratio X` taker buy ratio for sell pressure
+  - `--volume-wall-ratio X` wall size multiple vs median
+  - `--volume-imbalance X` book imbalance threshold
+  - `--strict` fail if requested indicators are unavailable
+  - `--debug` print indicator debug values
+
+- `cryptogent market snapshot list [--limit N] [--symbol SYM] [--timeframe TF]`  
+  List stored market snapshots (most recent first).
+
+- `cryptogent market snapshot show <id>`  
+  Show full snapshot details and stored indicators.
 
 ## Orders (Open Orders Management)
 

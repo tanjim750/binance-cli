@@ -1,0 +1,4 @@
+
+[market]
+pandas>=2.0
+pandas-ta>=0.3.14b0

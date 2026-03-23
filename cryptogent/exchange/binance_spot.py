@@ -156,6 +156,20 @@ class BinanceSpotClient(SpotExchangeClient):
             raise RuntimeError("Unexpected /api/v3/ticker/bookTicker response")
         return resp.data
 
+    def get_order_book(self, *, symbol: str, limit: int = 50) -> dict:
+        url = self._url("/api/v3/depth")
+        url = with_query(url, {"symbol": symbol, "limit": int(limit)})
+        resp = request_json(
+            method="GET",
+            url=url,
+            headers=self._headers(signed=False),
+            timeout_s=self.timeout_s,
+            ssl_context=self._ssl_context(),
+        )
+        if not isinstance(resp.data, dict):
+            raise RuntimeError("Unexpected /api/v3/depth response")
+        return resp.data
+
     def get_klines(self, *, symbol: str, interval: str, limit: int) -> list[list]:
         url = self._url("/api/v3/klines")
         url = with_query(url, {"symbol": symbol, "interval": interval, "limit": int(limit)})

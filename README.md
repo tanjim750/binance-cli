@@ -88,4 +88,3 @@ As a last resort (debug only), you can disable verification:
 python -m cryptogent exchange ping --insecure
 ```
 # CryptoGent
-# binance-cli

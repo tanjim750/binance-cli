@@ -1,0 +1,2 @@
+[console_scripts]
+cryptogent = cryptogent.cli.main:main

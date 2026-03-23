@@ -5,12 +5,15 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
 from cryptogent.exchange.binance_spot import BinanceSpotClient
-from cryptogent.market.candles import CandleError, CandleMetrics, compute_candle_metrics
-from cryptogent.market.tickers import TickerError, quote_volume_24h, spread_pct_from_book
+from cryptogent.market.candles import CandleMetrics
+from cryptogent.market.compute_engine import ComputeEngineError, compute_market_metrics
 
 
 class MarketDataError(RuntimeError):
     pass
+
+
+_CACHE: dict[tuple, tuple[float, MarketSnapshot]] = {}
 
 
 def _now_ms() -> int:
@@ -67,26 +70,13 @@ def fetch_market_snapshot(
 
     book: dict | None = None
     book_time_ms: int | None = None
-    bid: Decimal | None = None
-    ask: Decimal | None = None
-    spread_pct: Decimal | None = None
     if fetch_book_ticker:
         book_time_ms = _now_ms()
         book = client.get_book_ticker(symbol=symbol)
-        if isinstance(book, dict):
-            try:
-                bid, ask, spread_pct = spread_pct_from_book(book)
-            except TickerError:
-                bid, ask, spread_pct = None, None, None
 
     try:
-        candles = compute_candle_metrics(klines)
-    except CandleError as e:
-        raise MarketDataError(str(e)) from e
-
-    try:
-        vol_q = quote_volume_24h(stats)
-    except TickerError as e:
+        computed = compute_market_metrics(klines=klines, stats_24h=stats, book_ticker=book)
+    except ComputeEngineError as e:
         raise MarketDataError(str(e)) from e
 
     return MarketSnapshot(
@@ -99,10 +89,52 @@ def fetch_market_snapshot(
         klines_time_ms=klines_time_ms,
         book_ticker=book,
         book_time_ms=book_time_ms,
-        candles=candles,
-        volume_24h_quote=vol_q,
-        bid=bid,
-        ask=ask,
-        spread_pct=spread_pct,
+        candles=computed.candles,
+        volume_24h_quote=computed.volume_24h_quote,
+        bid=computed.bid,
+        ask=computed.ask,
+        spread_pct=computed.spread_pct,
     )
 
+
+def fetch_market_snapshot_cached(
+    *,
+    client: BinanceSpotClient,
+    symbol: str,
+    candle_interval: str,
+    candle_count: int,
+    fetch_book_ticker: bool,
+    cache_ttl_s: int,
+    return_meta: bool = False,
+) -> MarketSnapshot | tuple[MarketSnapshot, bool]:
+    if cache_ttl_s <= 0:
+        snap = fetch_market_snapshot(
+            client=client,
+            symbol=symbol,
+            candle_interval=candle_interval,
+            candle_count=candle_count,
+            fetch_book_ticker=fetch_book_ticker,
+        )
+        return (snap, False) if return_meta else snap
+    key = (
+        str(client.base_url or ""),
+        symbol,
+        candle_interval,
+        int(candle_count),
+        bool(fetch_book_ticker),
+    )
+    now = time.time()
+    hit = _CACHE.get(key)
+    if hit:
+        ts, snap = hit
+        if (now - ts) <= cache_ttl_s:
+            return (snap, True) if return_meta else snap
+    snap = fetch_market_snapshot(
+        client=client,
+        symbol=symbol,
+        candle_interval=candle_interval,
+        candle_count=candle_count,
+        fetch_book_ticker=fetch_book_ticker,
+    )
+    _CACHE[key] = (now, snap)
+    return (snap, False) if return_meta else snap

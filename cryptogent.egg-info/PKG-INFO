@@ -1,0 +1,101 @@
+Metadata-Version: 2.4
+Name: cryptogent
+Version: 0.1.0
+Summary: Local, safety-first Binance Spot trading agent (LLM advisory only).
+Author: Tanjim Abubokor
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Provides-Extra: market
+Requires-Dist: pandas>=2.0; extra == "market"
+Requires-Dist: pandas-ta>=0.3.14b0; extra == "market"
+
+# CryptoGent
+
+Local, safety-first crypto trading agent architecture targeting **Binance Spot only**.
+
+This repository currently implements **Phase 1 (foundation)**:
+
+- Python project skeleton organized by layers
+- Config loading (TOML) with environment-variable overrides
+- SQLite schema + initializer
+- Minimal CLI entrypoint
+
+## Quick start
+
+```bash
+python -m cryptogent init
+python -m cryptogent status
+python -m cryptogent exchange ping
+python -m cryptogent sync startup
+python -m cryptogent show balances --limit 20
+python -m cryptogent trade start --profit-target-pct 2.0 --stop-loss-pct 1.0 --deadline-minutes 120 --budget 50 --symbol BTCUSDT
+python -m cryptogent trade validate 1
+python -m cryptogent trade list
+```
+
+## Notes
+
+- Exchange integration and trading logic are intentionally not implemented yet.
+- Any LLM integration must remain **advisory-only** and be gated by deterministic validation + risk checks.
+
+## Binance credentials
+
+Set credentials via environment variables (recommended):
+
+- `BINANCE_API_KEY`
+- `BINANCE_API_SECRET`
+
+Then you can test authenticated connectivity:
+
+```bash
+python -m cryptogent exchange balances
+```
+
+If you still want to store them in `cryptogent.toml` (plaintext), use:
+
+```bash
+python -m cryptogent config set-binance --api-key "..." --api-secret-stdin < /dev/tty
+```
+
+## Spot Test Network (testnet)
+
+You can point CryptoGent at the Binance Spot Test Network for testing:
+
+```bash
+python -m cryptogent config use-testnet
+python -m cryptogent exchange ping
+python -m cryptogent sync startup
+```
+
+If you use separate testnet API credentials, set:
+
+- `BINANCE_TESTNET_API_KEY`
+- `BINANCE_TESTNET_API_SECRET`
+
+Or store them in `cryptogent.toml` (plaintext):
+
+```bash
+python -m cryptogent config set-binance-testnet --api-key "..." --api-secret-stdin < /dev/tty
+```
+
+To go back to the real API:
+
+```bash
+python -m cryptogent config use-mainnet
+```
+
+## TLS / Proxy CA
+
+If you're behind a TLS-intercepting proxy (common on corporate networks) you may see certificate errors.
+You can point CryptoGent at your proxy CA bundle:
+
+```bash
+python -m cryptogent exchange ping --ca-bundle /path/to/proxy-ca.pem
+```
+
+As a last resort (debug only), you can disable verification:
+
+```bash
+python -m cryptogent exchange ping --insecure
+```
+# CryptoGent

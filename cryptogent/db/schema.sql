@@ -122,6 +122,158 @@ CREATE TABLE IF NOT EXISTS dust_ledger (
   updated_at_utc TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS market_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  symbol TEXT NOT NULL,
+  timeframe TEXT NOT NULL,
+  captured_at_utc TEXT NOT NULL,
+  last_price TEXT NOT NULL,
+  bid TEXT,
+  ask TEXT,
+  spread_pct TEXT,
+  change_percent TEXT,
+  volume_quote TEXT,
+  indicators_json TEXT,
+  condition_summary TEXT,
+  enabled_flags TEXT,
+  config_hash TEXT
+);
+
+CREATE TABLE IF NOT EXISTS fear_greed_index (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  value TEXT NOT NULL,
+  value_classification TEXT NOT NULL,
+  timestamp_utc TEXT NOT NULL,
+  time_until_update_s INTEGER,
+  source TEXT NOT NULL DEFAULT 'alternative.me',
+  raw_json TEXT NOT NULL,
+  created_at_utc TEXT NOT NULL,
+  updated_at_utc TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fear_greed_source_ts ON fear_greed_index(source, timestamp_utc);
+CREATE INDEX IF NOT EXISTS idx_fear_greed_created ON fear_greed_index(created_at_utc);
+
+CREATE TABLE IF NOT EXISTS news_articles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  provider TEXT NOT NULL,
+  provider_article_id TEXT NOT NULL,
+  request_kind TEXT NOT NULL,
+  request_params_json TEXT,
+  title TEXT NOT NULL,
+  description TEXT,
+  content TEXT,
+  url TEXT NOT NULL,
+  image_url TEXT,
+  published_at_utc TEXT NOT NULL,
+  lang TEXT,
+  source_id TEXT,
+  source_name TEXT,
+  source_url TEXT,
+  source_country TEXT,
+  fetched_at_utc TEXT NOT NULL,
+  raw_json TEXT NOT NULL,
+  created_at_utc TEXT NOT NULL,
+  updated_at_utc TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_news_provider_article ON news_articles(provider, provider_article_id);
+CREATE INDEX IF NOT EXISTS idx_news_published ON news_articles(published_at_utc);
+CREATE INDEX IF NOT EXISTS idx_news_provider ON news_articles(provider);
+
+CREATE TABLE IF NOT EXISTS telegram_channel_state (
+  channel TEXT NOT NULL PRIMARY KEY,
+  last_message_id INTEGER,
+  last_synced_at_utc TEXT,
+  created_at_utc TEXT NOT NULL,
+  updated_at_utc TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS telegram_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel TEXT NOT NULL,
+  message_id INTEGER NOT NULL,
+  published_at_utc TEXT NOT NULL,
+  text TEXT,
+  views INTEGER,
+  forwards INTEGER,
+  has_media INTEGER NOT NULL DEFAULT 0,
+  source_type TEXT,
+  sentiment_score REAL,
+  impact_score REAL,
+  event_hash TEXT,
+  raw_json TEXT NOT NULL,
+  created_at_utc TEXT NOT NULL,
+  updated_at_utc TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_telegram_channel_message ON telegram_messages(channel, message_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_telegram_event_hash ON telegram_messages(event_hash);
+CREATE INDEX IF NOT EXISTS idx_telegram_published ON telegram_messages(published_at_utc);
+CREATE INDEX IF NOT EXISTS idx_telegram_channel ON telegram_messages(channel);
+
+CREATE TABLE IF NOT EXISTS youtube_channel_state (
+  channel_id TEXT NOT NULL PRIMARY KEY,
+  channel_name TEXT,
+  last_video_published_at_utc TEXT,
+  last_synced_at_utc TEXT,
+  created_at_utc TEXT NOT NULL,
+  updated_at_utc TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS youtube_discovery_state (
+  discovery_key TEXT NOT NULL PRIMARY KEY,
+  last_published_at_utc TEXT,
+  last_synced_at_utc TEXT,
+  created_at_utc TEXT NOT NULL,
+  updated_at_utc TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS youtube_videos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  video_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  channel_title TEXT,
+  title TEXT NOT NULL,
+  description TEXT,
+  published_at_utc TEXT NOT NULL,
+  tags_json TEXT,
+  view_count INTEGER,
+  like_count INTEGER,
+  comment_count INTEGER,
+  topic_labels_json TEXT,
+  sentiment_score REAL,
+  impact_score REAL,
+  source_type TEXT,
+  raw_json TEXT NOT NULL,
+  created_at_utc TEXT NOT NULL,
+  updated_at_utc TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS youtube_comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  video_id TEXT NOT NULL,
+  comment_id TEXT NOT NULL,
+  published_at_utc TEXT NOT NULL,
+  text TEXT,
+  like_count INTEGER,
+  reply_count INTEGER,
+  author_channel_id TEXT,
+  source_type TEXT,
+  topic_labels_json TEXT,
+  sentiment_score REAL,
+  impact_score REAL,
+  raw_json TEXT NOT NULL,
+  created_at_utc TEXT NOT NULL,
+  updated_at_utc TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_youtube_video_id ON youtube_videos(video_id);
+CREATE INDEX IF NOT EXISTS idx_youtube_channel_id ON youtube_videos(channel_id);
+CREATE INDEX IF NOT EXISTS idx_youtube_published ON youtube_videos(published_at_utc);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_youtube_comment_id ON youtube_comments(comment_id);
+CREATE INDEX IF NOT EXISTS idx_youtube_comment_video ON youtube_comments(video_id);
+
 CREATE TABLE IF NOT EXISTS trade_plans (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   trade_request_id INTEGER NOT NULL,

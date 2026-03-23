@@ -11,6 +11,7 @@ import tty
 import contextlib
 from pathlib import Path
 from datetime import UTC, datetime
+from typing import Any
 
 from cryptogent.config.io import BINANCE_SPOT_BASE_URL, ConfigPaths, ensure_default_config
 from cryptogent.config.io import load_config
@@ -20,7 +21,17 @@ from cryptogent.db.migrate import ensure_db_initialized
 from cryptogent.db.connection import connect
 from cryptogent.exchange.binance_errors import BinanceAPIError
 from cryptogent.exchange.binance_spot import BinanceSpotClient
-from cryptogent.market.market_data_service import MarketDataError, fetch_market_snapshot
+from cryptogent.market.analysis.crypto import compute_crypto_metrics
+from cryptogent.market.market_data_service import MarketDataError, fetch_market_snapshot, fetch_market_snapshot_cached
+from cryptogent.market.analysis.momentum import compute_momentum_metrics
+from cryptogent.market.analysis.trend import compute_trend_metrics
+from cryptogent.market.analysis.volatility import compute_volatility_metrics
+from cryptogent.market.analysis.volume import compute_volume_metrics
+from cryptogent.market.analysis.structure import compute_structure_metrics
+from cryptogent.market.analysis.quant import compute_quant_metrics
+from cryptogent.market.analysis.execution import compute_execution_metrics
+from cryptogent.market.analysis.risk import compute_risk_metrics
+from cryptogent.market.analysis.price_action import compute_price_action_metrics
 from cryptogent.planning.trade_planner import PlanningError, build_trade_plan, persist_trade_plan
 from cryptogent.safety.validator import SafetyError, evaluate_safety
 from cryptogent.execution.executor import (
@@ -33,6 +44,7 @@ from cryptogent.execution.executor import (
 from cryptogent.execution.result_parser import parse_fills
 from cryptogent.state.manager import OrderRow, StateManager
 from cryptogent.sync.binance_sync import startup_sync, sync_balances, sync_open_orders
+from cryptogent.sync.fear_greed_sync import sync_fear_greed
 from cryptogent.validation.trade_request import ValidationError, validate_trade_request
 from cryptogent.validation.binance_rules import parse_symbol_rules, precheck_market_buy, quantize_down, RuleError
 from cryptogent.planning.feasibility import FeasibilityError, evaluate_feasibility, freshness_and_consistency_checks
@@ -40,6 +52,13 @@ from cryptogent.util.time import ms_to_utc_iso, utcnow_iso
 from decimal import Decimal, InvalidOperation
 import secrets
 import json as _json
+
+
+def _safe_json(value: Any) -> str | None:
+    try:
+        return _json.dumps(value, separators=(",", ":"))
+    except Exception:
+        return None
 
 
 def _add_common_paths(parser: argparse.ArgumentParser) -> None:
@@ -407,6 +426,25 @@ def cmd_sync_open_orders(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_sync_fear_greed(args: argparse.Namespace) -> int:
+    paths = ConfigPaths.from_cli(config_path=args.config, db_path=args.db)
+    config_path = ensure_default_config(paths.config_path)
+    cfg = load_config(config_path)
+    db_path = ensure_db_initialized(config_path=config_path, db_path=paths.db_path)
+    with connect(db_path) as conn:
+        result = sync_fear_greed(
+            conn=conn,
+            ca_bundle=getattr(args, "ca_bundle", None),
+            insecure=bool(getattr(args, "insecure", False)),
+            cache_ttl_s=cfg.fear_greed_cache_ttl_seconds,
+        )
+    if result.status != "ok":
+        print("ERROR (see `show audit` and `status`)")
+        return 2
+    print(f"OK kind={result.kind} rows={result.rows_upserted}")
+    return 0
+
+
 def cmd_show_balances(args: argparse.Namespace) -> int:
     paths = ConfigPaths.from_cli(config_path=args.config, db_path=args.db)
     config_path = ensure_default_config(paths.config_path)
@@ -462,6 +500,24 @@ def cmd_show_balances(args: argparse.Namespace) -> int:
         print(f"{asset:<12} {free_s:>18} {locked_s:>18} {updated_at:>22}")
     return 0
 
+
+def cmd_show_fear_greed(args: argparse.Namespace) -> int:
+    paths = ConfigPaths.from_cli(config_path=args.config, db_path=args.db)
+    config_path = ensure_default_config(paths.config_path)
+    db_path = ensure_db_initialized(config_path=config_path, db_path=paths.db_path)
+    with connect(db_path) as conn:
+        state = StateManager(conn)
+        rows = state.list_fear_greed(limit=args.limit)
+    if not rows:
+        print("(no fear & greed data cached)")
+        return 0
+    for r in rows:
+        ts = r.get("timestamp_utc")
+        value = r.get("value")
+        cls = r.get("value_classification")
+        source = r.get("source")
+        print(f"{ts} value={value} class={cls} source={source}")
+    return 0
 
 def cmd_show_open_orders(args: argparse.Namespace) -> int:
     paths = ConfigPaths.from_cli(config_path=args.config, db_path=args.db)
@@ -901,7 +957,8 @@ def cmd_menu(args: argparse.Namespace) -> int:
                 print(" 1) Startup sync")
                 print(" 2) Sync balances")
                 print(" 3) Sync open orders")
-                print(" 4) Back")
+                print(" 4) Sync fear & greed index")
+                print(" 5) Back")
                 sub = input("> ").strip()
                 if sub == "1":
                     cmd_sync_startup(_net_ns())
@@ -911,6 +968,8 @@ def cmd_menu(args: argparse.Namespace) -> int:
                     sym = _prompt("Symbol (optional)", default="").upper().strip() or None
                     cmd_sync_open_orders(_net_ns(symbol=sym))
                 elif sub == "4":
+                    cmd_sync_fear_greed(_net_ns())
+                elif sub == "5":
                     break
                 else:
                     print(_style("Invalid choice", fg="red"))
@@ -922,8 +981,9 @@ def cmd_menu(args: argparse.Namespace) -> int:
                 print(_style("Show (cached; no network)", fg="cyan", bold=True))
                 print(" 1) Show balances")
                 print(" 2) Show open orders")
-                print(" 3) Show audit logs")
-                print(" 4) Back")
+                print(" 3) Show fear & greed index")
+                print(" 4) Show audit logs")
+                print(" 5) Back")
                 sub = input("> ").strip()
                 if sub == "1":
                     limit_s = _prompt("How many rows?", default="25")
@@ -948,9 +1008,12 @@ def cmd_menu(args: argparse.Namespace) -> int:
                     limit_s = _prompt("How many rows?", default="50")
                     cmd_show_open_orders(argparse.Namespace(config=args.config, db=args.db, symbol=sym, limit=int(limit_s)))
                 elif sub == "3":
+                    limit_s = _prompt("How many rows?", default="20")
+                    cmd_show_fear_greed(argparse.Namespace(config=args.config, db=args.db, limit=int(limit_s)))
+                elif sub == "4":
                     limit_s = _prompt("How many entries?", default="50")
                     cmd_show_audit(argparse.Namespace(config=args.config, db=args.db, limit=int(limit_s)))
-                elif sub == "4":
+                elif sub == "5":
                     break
                 else:
                     print(_style("Invalid choice", fg="red"))
@@ -2959,6 +3022,1887 @@ def cmd_position_show(args: argparse.Namespace) -> int:
     print(f"- Cost Basis: {cost_basis}")
     print(f"- Unrealized PnL: {unrealized}")
     print(f"- PnL %: {pnl_pct}")
+    return 0
+
+
+def cmd_market_status(args: argparse.Namespace) -> int:
+    symbol = str(getattr(args, "symbol", "") or "").strip().upper()
+    timeframe = str(getattr(args, "timeframe", "") or "").strip()
+    if not symbol or not timeframe:
+        print("Missing required --symbol and/or --timeframe")
+        return 2
+
+    supported = {
+        "1m",
+        "3m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "4h",
+        "6h",
+        "8h",
+        "12h",
+        "1d",
+        "1w",
+        "1M",
+    }
+    if timeframe not in supported:
+        print(f"Unsupported timeframe: {timeframe}")
+        return 2
+
+    limit = int(getattr(args, "limit", 100))
+    if limit <= 0:
+        print("Invalid --limit (must be > 0)")
+        return 2
+
+    cache_raw = getattr(args, "cache", None)
+    cache_ttl_s = 0
+    if cache_raw not in (None, ""):
+        try:
+            s = str(cache_raw).strip().lower()
+            if s.endswith("s"):
+                cache_ttl_s = int(s[:-1])
+            elif s.endswith("m"):
+                cache_ttl_s = int(s[:-1]) * 60
+            elif s.endswith("h"):
+                cache_ttl_s = int(s[:-1]) * 3600
+            else:
+                cache_ttl_s = int(s)
+        except Exception:
+            print("Invalid --cache (use seconds like 5s, 60, 1m, 1h)")
+            return 2
+        if cache_ttl_s < 0:
+            print("Invalid --cache (must be >= 0)")
+            return 2
+
+    market_env = str(getattr(args, "market_env", "mainnet_public") or "mainnet_public").strip().lower()
+
+    profile = str(getattr(args, "profile", "") or "").strip().lower()
+    if profile:
+        def _enable(flag: str) -> None:
+            if not getattr(args, flag, False):
+                setattr(args, flag, True)
+
+        if profile == "quick":
+            for f in ("momentum", "trend", "volatility"):
+                _enable(f)
+        elif profile == "trend":
+            for f in ("momentum", "trend", "structure", "price_action"):
+                _enable(f)
+        elif profile == "full":
+            for f in ("momentum", "trend", "volatility", "volume", "structure", "price_action", "execution", "quant", "crypto", "risk"):
+                _enable(f)
+        else:
+            print("Invalid --profile (use quick|trend|full)")
+            return 2
+    if market_env not in ("mainnet_public", "testnet"):
+        print("Invalid --market-env (mainnet_public|testnet)")
+        return 2
+
+    paths = ConfigPaths.from_cli(config_path=args.config, db_path=args.db)
+    config_path = ensure_default_config(paths.config_path)
+    cfg = load_config(config_path)
+    db_path = ensure_db_initialized(config_path=config_path, db_path=paths.db_path)
+    ca_bundle = getattr(args, "ca_bundle", None)
+    insecure = bool(getattr(args, "insecure", False))
+    client = _price_client_for_market_env(cfg=cfg, market_env=market_env, ca_bundle=ca_bundle, insecure=insecure)
+
+    # Volume config with CLI override priority
+    vol_window_fast = getattr(args, "volume_window_fast", None)
+    vol_window_slow = getattr(args, "volume_window_slow", None)
+    vol_spike_ratio = getattr(args, "volume_spike_ratio", None)
+    vol_zscore = getattr(args, "volume_zscore", None)
+    vol_buy_ratio = getattr(args, "volume_buy_ratio", None)
+    vol_sell_ratio = getattr(args, "volume_sell_ratio", None)
+    vol_depth = getattr(args, "volume_depth", None)
+    vol_wall_ratio = getattr(args, "volume_wall_ratio", None)
+    vol_imbalance = getattr(args, "volume_imbalance", None)
+    quant_window = getattr(args, "quant_window", None)
+    quant_benchmark = getattr(args, "benchmark", None)
+    corr_method = getattr(args, "corr_method", None)
+    exec_depth = getattr(args, "execution_depth", None)
+    exec_notional = getattr(args, "execution_notional", None)
+    exec_side = getattr(args, "execution_side", None)
+    risk_side = getattr(args, "risk_side", None)
+    risk_entry = getattr(args, "risk_entry", None)
+    risk_pct = getattr(args, "risk_pct", None)
+    risk_account_balance = getattr(args, "risk_account_balance", None)
+    risk_max_position_pct = getattr(args, "risk_max_position_pct", None)
+
+    vol_window_fast = int(vol_window_fast) if vol_window_fast not in (None, "") else cfg.market_volume_window_fast
+    vol_window_slow = int(vol_window_slow) if vol_window_slow not in (None, "") else cfg.market_volume_window_slow
+    vol_spike_ratio = float(vol_spike_ratio) if vol_spike_ratio not in (None, "") else cfg.market_volume_spike_ratio
+    vol_zscore = float(vol_zscore) if vol_zscore not in (None, "") else cfg.market_volume_zscore_threshold
+    vol_buy_ratio = float(vol_buy_ratio) if vol_buy_ratio not in (None, "") else cfg.market_volume_buy_ratio
+    vol_sell_ratio = float(vol_sell_ratio) if vol_sell_ratio not in (None, "") else cfg.market_volume_sell_ratio
+    vol_depth = int(vol_depth) if vol_depth not in (None, "") else cfg.market_volume_depth_limit
+    vol_wall_ratio = float(vol_wall_ratio) if vol_wall_ratio not in (None, "") else cfg.market_volume_wall_ratio
+    vol_imbalance = float(vol_imbalance) if vol_imbalance not in (None, "") else cfg.market_volume_imbalance_threshold
+    quant_window = int(quant_window) if quant_window not in (None, "") else 200
+    quant_benchmark = str(quant_benchmark) if quant_benchmark not in (None, "") else "BTCUSDT"
+    corr_method = str(corr_method) if corr_method not in (None, "") else "pearson"
+    exec_depth = int(exec_depth) if exec_depth not in (None, "") else 10
+    exec_notional = Decimal(str(exec_notional)) if exec_notional not in (None, "") else Decimal("1000")
+    exec_side = str(exec_side) if exec_side not in (None, "") else "buy"
+    risk_side = str(risk_side) if risk_side not in (None, "") else "long"
+    risk_entry = Decimal(str(risk_entry)) if risk_entry not in (None, "") else None
+    risk_pct = Decimal(str(risk_pct)) if risk_pct not in (None, "") else Decimal("1")
+    risk_account_balance = Decimal(str(risk_account_balance)) if risk_account_balance not in (None, "") else None
+    risk_max_position_pct = Decimal(str(risk_max_position_pct)) if risk_max_position_pct not in (None, "") else Decimal("20")
+    if corr_method not in ("pearson",):
+        print("Invalid --corr-method (pearson)")
+        return 2
+    if exec_depth <= 0:
+        print("Invalid --execution-depth (must be > 0)")
+        return 2
+    if exec_notional <= 0:
+        print("Invalid --execution-notional (must be > 0)")
+        return 2
+    if exec_side.lower() not in ("buy", "sell"):
+        print("Invalid --execution-side (buy|sell)")
+        return 2
+    if risk_side.lower() not in ("long", "short"):
+        print("Invalid --risk-side (long|short)")
+        return 2
+
+    risk_on = bool(getattr(args, "risk", False))
+    need_momentum = bool(getattr(args, "momentum", False) or risk_on)
+    need_trend = bool(getattr(args, "trend", False) or risk_on)
+    need_volatility = bool(getattr(args, "volatility", False) or risk_on)
+    need_volume = bool(getattr(args, "volume", False) or risk_on)
+    need_structure = bool(getattr(args, "structure", False) or risk_on)
+    need_price_action = bool(getattr(args, "price_action", False))
+    need_execution = bool(getattr(args, "execution", False) or risk_on)
+
+    cache_hit = False
+    snap = None
+    indicators: dict | None = None
+    payload: dict | None = None
+    cond = None
+    high_24h = low_24h = change_pct = volume_24h = None
+    if cache_ttl_s > 0:
+        try:
+            with connect(db_path) as conn:
+                state = StateManager(conn)
+                cached = state.get_latest_market_snapshot(symbol=symbol, timeframe=timeframe)
+            if cached:
+                try:
+                    captured_at = datetime.fromisoformat(str(cached.get("captured_at_utc") or "").replace("Z", "+00:00")).astimezone(UTC)
+                    age_s = (datetime.now(UTC) - captured_at).total_seconds()
+                except Exception:
+                    age_s = cache_ttl_s + 1
+                if age_s <= cache_ttl_s:
+                    cache_hit = True
+                    cond = cached.get("condition_summary") or "unknown"
+                    indicators = None
+                    try:
+                        if cached.get("indicators_json"):
+                            indicators = _json.loads(str(cached.get("indicators_json")))
+                    except Exception:
+                        indicators = None
+                    high_24h = None
+                    low_24h = None
+                    change_pct = cached.get("change_percent")
+                    volume_24h = cached.get("volume_quote")
+                    payload = {
+                        "symbol": symbol,
+                        "timeframe": timeframe,
+                        "last_price": str(cached.get("last_price")),
+                        "bid": cached.get("bid"),
+                        "ask": cached.get("ask"),
+                        "spread_pct": cached.get("spread_pct"),
+                        "high_24h": high_24h,
+                        "low_24h": low_24h,
+                        "change_pct_24h": change_pct,
+                        "volume_quote_24h": volume_24h,
+                        "condition": cond,
+                        "momentum_pct": str(indicators.get("momentum_pct")) if indicators and indicators.get("momentum_pct") is not None else None,
+                        "volatility_pct": str(indicators.get("volatility_pct")) if indicators and indicators.get("volatility_pct") is not None else None,
+                        "candle_count": str(indicators.get("candle_count")) if indicators and indicators.get("candle_count") is not None else None,
+                    }
+                    if indicators:
+                        for key in (
+                            "candle_count",
+                            "rsi",
+                            "rsi_prev",
+                            "rsi_zone",
+                            "macd",
+                            "macd_signal",
+                            "macd_hist",
+                            "stoch_rsi",
+                            "stoch_rsi_k",
+                            "stoch_rsi_d",
+                            "stoch_rsi_bias",
+                            "williams_r",
+                            "williams_r_zone",
+                            "cci",
+                            "cci_zone",
+                            "roc",
+                            "roc_bias",
+                            "macd_bias",
+                            "composite_signal",
+                            "rsi_bullish_divergence",
+                            "rsi_bearish_divergence",
+                            "ema_20",
+                            "ema_50",
+                            "ema_200",
+                            "sma_20",
+                            "sma_50",
+                            "sma_200",
+                            "trend_crossover",
+                            "trend_crossover_event",
+                            "trend_crossover_strength_pct",
+                            "ema_50_200_crossover",
+                            "ema_50_200_event",
+                            "ema_50_200_strength_pct",
+                            "sma_20_50_crossover",
+                            "sma_20_50_event",
+                            "sma_50_200_crossover",
+                            "sma_50_200_event",
+                            "adx",
+                            "adx_pos",
+                            "adx_neg",
+                            "adx_trend_strength",
+                            "ichi_tenkan",
+                            "ichi_kijun",
+                            "ichi_senkou_a",
+                            "ichi_senkou_b",
+                            "ichi_cloud_bias",
+                            "price_vs_ema20_pct",
+                            "price_vs_ema50_pct",
+                            "price_vs_ema200_pct",
+                            "trend_bias",
+                            "atr",
+                            "atr_pct",
+                            "bb_upper",
+                            "bb_mid",
+                            "bb_lower",
+                            "bb_width_pct",
+                            "bb_pct_b",
+                            "bb_position",
+                            "kc_upper",
+                            "kc_lower",
+                            "squeeze",
+                            "hist_vol_pct",
+                            "chandelier_long",
+                            "chandelier_short",
+                            "vol_regime",
+                            "volume_base_last",
+                            "volume_quote_last",
+                            "volume_quote_avg_20",
+                            "volume_quote_avg_50",
+                            "volume_quote_std_20",
+                            "volume_quote_zscore_20",
+                            "volume_quote_trend",
+                            "volume_spike",
+                            "taker_buy_ratio",
+                            "taker_buy_ratio_avg20",
+                            "buy_pressure",
+                            "sustained_buy_pressure",
+                            "sustained_sell_pressure",
+                            "obv",
+                            "obv_trend",
+                            "vwap_20",
+                            "price_vs_vwap_pct",
+                            "vol_price_confirmation",
+                            "bid_qty",
+                            "ask_qty",
+                            "book_imbalance",
+                            "liquidity_zones",
+                            "buy_wall_price",
+                            "buy_wall_qty",
+                            "sell_wall_price",
+                            "sell_wall_qty",
+                            "structure_trend",
+                            "range_state",
+                            "range_high",
+                            "range_low",
+                            "range_width_pct",
+                            "bos",
+                            "bos_direction",
+                            "bos_streak",
+                            "choch",
+                            "choch_direction",
+                            "accumulation",
+                            "last_swing_high",
+                            "last_swing_low",
+                            "prev_swing_high",
+                            "prev_swing_low",
+                            "price_zone",
+                            "fvg_count",
+                            "last_fvg_direction",
+                            "last_fvg_high",
+                            "last_fvg_low",
+                            "last_fvg_mitigated",
+                            "price_action_available",
+                            "pa_unavailable_reason",
+                            "pa_support_level",
+                            "pa_support_strength",
+                            "pa_support_distance_pct",
+                            "pa_resistance_level",
+                            "pa_resistance_strength",
+                            "pa_resistance_distance_pct",
+                            "pa_structure_type",
+                            "pa_last_swing_high",
+                            "pa_last_swing_low",
+                            "pa_breakout",
+                            "pa_breakdown",
+                            "pa_breakout_level",
+                            "pa_breakdown_level",
+                            "pa_breakout_strength",
+                            "pa_patterns_json",
+                            "pa_last_pattern",
+                            "pa_dominant_bias",
+                            "pa_signal_count",
+                            "pa_confluence",
+                            "execution_available",
+                            "execution_unavailable_reason",
+                            "exec_mid",
+                            "exec_best_bid",
+                            "exec_best_ask",
+                            "exec_spread_abs",
+                            "exec_spread_pct",
+                            "exec_spread_quality",
+                            "exec_slippage_pct",
+                            "exec_effective_spread_pct",
+                            "exec_market_impact_pct",
+                            "exec_avg_fill_price",
+                            "exec_notional_used",
+                            "exec_fill_ratio_pct",
+                            "exec_levels_used",
+                            "exec_side",
+                            "exec_depth_levels",
+                            "exec_bid_depth_notional",
+                            "exec_ask_depth_notional",
+                            "exec_notional_available",
+                            "exec_depth_imbalance",
+                            "exec_depth_spread_pct",
+                            "risk_available",
+                            "risk_viable",
+                            "risk_rejection_reason",
+                            "risk_score",
+                            "risk_score_breakdown",
+                            "risk_entry_price",
+                            "risk_side",
+                            "risk_effective_entry",
+                            "risk_stop_price",
+                            "risk_stop_method",
+                            "risk_stop_distance_pct",
+                            "risk_stop_atr_multiple",
+                            "risk_stop_candidates",
+                            "risk_tp1",
+                            "risk_tp2",
+                            "risk_tp3",
+                            "risk_tp_fvg",
+                            "risk_tp_structure",
+                            "risk_tp_cloud",
+                            "risk_reward_risk_ratio",
+                            "risk_position_size_base",
+                            "risk_position_size_quote",
+                            "risk_position_size_pct",
+                            "risk_max_loss_quote",
+                            "risk_pct_used",
+                            "risk_caps_applied",
+                            "risk_suggested_leverage",
+                            "risk_liquidation_price",
+                            "risk_liquidation_distance_pct",
+                            "risk_flag_wide_stop",
+                            "risk_flag_concentration_cap",
+                            "risk_flag_liquidity_cap",
+                            "risk_flag_liquidation_warning",
+                            "risk_flag_low_adx_warning",
+                            "quant_available",
+                            "quant_unavailable_reason",
+                            "quant_window",
+                            "quant_benchmark",
+                            "quant_corr_method",
+                            "quant_corr",
+                            "quant_beta",
+                            "quant_return_zscore",
+                            "quant_realized_vol",
+                            "quant_vol_regime",
+                            "quant_mean_dev_pct",
+                            "quant_mean_reversion_state",
+                            "quant_max_drawdown_pct",
+                            "quant_sharpe_ratio",
+                            "quant_calmar_ratio",
+                            "quant_skewness",
+                            "quant_kurtosis",
+                            "quant_log_return",
+                            "quant_ret_mean",
+                            "quant_ret_std",
+                            "quant_price_vs_ema_pct",
+                            "quant_rsi",
+                            "quant_macd_hist",
+                            "quant_atr_norm",
+                            "quant_volume_zscore",
+                            "quant_spread_pct",
+                            "quant_range_pct",
+                            "futures_market",
+                            "funding_rate",
+                            "next_funding_time",
+                            "open_interest",
+                        ):
+                            if key in indicators and indicators.get(key) is not None:
+                                payload[key] = str(indicators.get(key))
+        except Exception:
+            cache_hit = False
+    if not cache_hit:
+        try:
+            fetch_fn = fetch_market_snapshot_cached if cache_ttl_s > 0 else fetch_market_snapshot
+            if fetch_fn is fetch_market_snapshot_cached:
+                snap, _ = fetch_fn(
+                    client=client,
+                    symbol=symbol,
+                    candle_interval=timeframe,
+                    candle_count=limit,
+                    fetch_book_ticker=True,
+                    cache_ttl_s=cache_ttl_s,
+                    return_meta=True,
+                )
+            else:
+                snap = fetch_fn(
+                    client=client,
+                    symbol=symbol,
+                    candle_interval=timeframe,
+                    candle_count=limit,
+                    fetch_book_ticker=True,
+                )
+        except (BinanceAPIError, MarketDataError, ValueError) as e:
+            print(f"ERROR: {e}")
+            return 2
+
+        stats = snap.stats_24h if isinstance(snap.stats_24h, dict) else {}
+        high_24h = stats.get("highPrice")
+        low_24h = stats.get("lowPrice")
+        change_pct = stats.get("priceChangePercent")
+        volume_24h = stats.get("quoteVolume")
+
+        momentum = snap.candles.momentum_pct
+        if momentum > 0:
+            cond = "bullish"
+        elif momentum < 0:
+            cond = "bearish"
+        else:
+            cond = "neutral"
+
+    if payload is None:
+        payload = {
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "last_price": str(snap.price),
+            "bid": str(snap.bid) if snap.bid is not None else None,
+            "ask": str(snap.ask) if snap.ask is not None else None,
+            "spread_pct": str(snap.spread_pct) if snap.spread_pct is not None else None,
+            "high_24h": high_24h,
+            "low_24h": low_24h,
+            "change_pct_24h": change_pct,
+            "volume_quote_24h": volume_24h,
+            "condition": cond,
+            "momentum_pct": str(momentum),
+            "volatility_pct": str(snap.candles.volatility_pct),
+            "candle_count": str(len(snap.klines)) if snap.klines is not None else None,
+        }
+
+    if not cache_hit and need_momentum:
+        m = compute_momentum_metrics(snap.candles.closes)
+        payload["rsi"] = str(m.rsi) if m.rsi is not None else None
+        payload["rsi_prev"] = str(m.rsi_prev) if m.rsi_prev is not None else None
+        payload["rsi_zone"] = m.rsi_zone
+        payload["macd"] = str(m.macd) if m.macd is not None else None
+        payload["macd_signal"] = str(m.macd_signal) if m.macd_signal is not None else None
+        payload["macd_hist"] = str(m.macd_hist) if m.macd_hist is not None else None
+        payload["macd_bias"] = m.macd_bias
+        stoch_k = getattr(m, "stoch_rsi_k", None)
+        stoch_d = getattr(m, "stoch_rsi_d", None)
+        stoch_v = stoch_k if stoch_k is not None else getattr(m, "stoch_rsi", None)
+        payload["stoch_rsi"] = str(stoch_v) if stoch_v is not None else None
+        payload["stoch_rsi_k"] = str(stoch_k) if stoch_k is not None else None
+        payload["stoch_rsi_d"] = str(stoch_d) if stoch_d is not None else None
+        payload["stoch_rsi_bias"] = m.stoch_rsi_bias
+        payload["williams_r"] = str(m.williams_r) if m.williams_r is not None else None
+        payload["williams_r_zone"] = m.williams_r_zone
+        payload["cci"] = str(m.cci) if m.cci is not None else None
+        payload["cci_zone"] = m.cci_zone
+        payload["roc"] = str(m.roc) if m.roc is not None else None
+        payload["roc_bias"] = m.roc_bias
+        payload["composite_signal"] = m.composite_signal
+        payload["rsi_bullish_divergence"] = (
+            str(m.rsi_bullish_divergence) if m.rsi_bullish_divergence is not None else None
+        )
+        payload["rsi_bearish_divergence"] = (
+            str(m.rsi_bearish_divergence) if m.rsi_bearish_divergence is not None else None
+        )
+
+    if not cache_hit and need_trend:
+        t = compute_trend_metrics(snap.candles.closes)
+        payload["ema_20"] = str(t.ema_20) if t.ema_20 is not None else None
+        payload["ema_50"] = str(t.ema_50) if t.ema_50 is not None else None
+        payload["ema_200"] = str(t.ema_200) if t.ema_200 is not None else None
+        payload["sma_20"] = str(t.sma_20) if t.sma_20 is not None else None
+        payload["sma_50"] = str(t.sma_50) if t.sma_50 is not None else None
+        payload["sma_200"] = str(t.sma_200) if t.sma_200 is not None else None
+        payload["trend_crossover"] = t.crossover
+        payload["trend_crossover_event"] = t.crossover_event
+        payload["trend_crossover_strength_pct"] = str(t.crossover_strength_pct) if t.crossover_strength_pct is not None else None
+        payload["ema_50_200_crossover"] = t.ema_50_200_crossover
+        payload["ema_50_200_event"] = t.ema_50_200_event
+        payload["ema_50_200_strength_pct"] = str(t.ema_50_200_strength_pct) if t.ema_50_200_strength_pct is not None else None
+        payload["sma_20_50_crossover"] = t.sma_20_50_crossover
+        payload["sma_20_50_event"] = t.sma_20_50_event
+        payload["sma_50_200_crossover"] = t.sma_50_200_crossover
+        payload["sma_50_200_event"] = t.sma_50_200_event
+        payload["adx"] = str(t.adx) if t.adx is not None else None
+        payload["adx_pos"] = str(t.adx_pos) if t.adx_pos is not None else None
+        payload["adx_neg"] = str(t.adx_neg) if t.adx_neg is not None else None
+        payload["adx_trend_strength"] = t.adx_trend_strength
+        payload["ichi_tenkan"] = str(t.ichi_tenkan) if t.ichi_tenkan is not None else None
+        payload["ichi_kijun"] = str(t.ichi_kijun) if t.ichi_kijun is not None else None
+        payload["ichi_senkou_a"] = str(t.ichi_senkou_a) if t.ichi_senkou_a is not None else None
+        payload["ichi_senkou_b"] = str(t.ichi_senkou_b) if t.ichi_senkou_b is not None else None
+        payload["ichi_cloud_bias"] = t.ichi_cloud_bias
+        payload["price_vs_ema20_pct"] = str(t.price_vs_ema20_pct) if t.price_vs_ema20_pct is not None else None
+        payload["price_vs_ema50_pct"] = str(t.price_vs_ema50_pct) if t.price_vs_ema50_pct is not None else None
+        payload["price_vs_ema200_pct"] = str(t.price_vs_ema200_pct) if t.price_vs_ema200_pct is not None else None
+        payload["trend_bias"] = t.trend_bias
+        payload["ema_20_prev"] = str(t.ema_20_prev) if t.ema_20_prev is not None else None
+        payload["ema_50_prev"] = str(t.ema_50_prev) if t.ema_50_prev is not None else None
+        payload["ema_200_prev"] = str(t.ema_200_prev) if t.ema_200_prev is not None else None
+        payload["sma_20_prev"] = str(t.sma_20_prev) if t.sma_20_prev is not None else None
+        payload["sma_50_prev"] = str(t.sma_50_prev) if t.sma_50_prev is not None else None
+        payload["sma_200_prev"] = str(t.sma_200_prev) if t.sma_200_prev is not None else None
+
+    if not cache_hit and need_volatility:
+        highs: list[Decimal] = []
+        lows: list[Decimal] = []
+        try:
+            for row in snap.klines:
+                if not isinstance(row, list) or len(row) < 5:
+                    continue
+                highs.append(Decimal(str(row[2])))
+                lows.append(Decimal(str(row[3])))
+        except Exception:
+            highs = []
+            lows = []
+        v = compute_volatility_metrics(highs, lows, snap.candles.closes)
+        payload["atr"] = str(v.atr) if v.atr is not None else None
+        payload["atr_pct"] = str(v.atr_pct) if v.atr_pct is not None else None
+        payload["bb_upper"] = str(v.bb_upper) if v.bb_upper is not None else None
+        payload["bb_mid"] = str(v.bb_mid) if v.bb_mid is not None else None
+        payload["bb_lower"] = str(v.bb_lower) if v.bb_lower is not None else None
+        payload["bb_width_pct"] = str(v.bb_width_pct) if v.bb_width_pct is not None else None
+        payload["bb_pct_b"] = str(v.bb_pct_b) if v.bb_pct_b is not None else None
+        payload["bb_position"] = v.bb_position
+        payload["kc_upper"] = str(v.kc_upper) if v.kc_upper is not None else None
+        payload["kc_lower"] = str(v.kc_lower) if v.kc_lower is not None else None
+        payload["squeeze"] = str(v.squeeze) if v.squeeze is not None else None
+        payload["hist_vol_pct"] = str(v.hist_vol_pct) if v.hist_vol_pct is not None else None
+        payload["chandelier_long"] = str(v.chandelier_long) if v.chandelier_long is not None else None
+        payload["chandelier_short"] = str(v.chandelier_short) if v.chandelier_short is not None else None
+        payload["vol_regime"] = v.vol_regime
+
+    # Shared depth snapshot for volume/execution
+    depth_bids: list[tuple[Decimal, Decimal]] | None = None
+    depth_asks: list[tuple[Decimal, Decimal]] | None = None
+    depth_limit = 0
+    if need_volume and vol_depth and vol_depth > 0:
+        depth_limit = max(depth_limit, int(vol_depth))
+    if need_execution:
+        depth_limit = max(depth_limit, int(exec_depth))
+    if not cache_hit and depth_limit > 0:
+        try:
+            depth = client.get_order_book(symbol=symbol, limit=int(depth_limit))
+            bids = depth.get("bids") if isinstance(depth, dict) else None
+            asks = depth.get("asks") if isinstance(depth, dict) else None
+            if isinstance(bids, list):
+                depth_bids = []
+                for row in bids:
+                    if isinstance(row, list) and len(row) >= 2:
+                        depth_bids.append((Decimal(str(row[0])), Decimal(str(row[1]))))
+            if isinstance(asks, list):
+                depth_asks = []
+                for row in asks:
+                    if isinstance(row, list) and len(row) >= 2:
+                        depth_asks.append((Decimal(str(row[0])), Decimal(str(row[1]))))
+        except Exception:
+            depth_bids = None
+            depth_asks = None
+
+    if not cache_hit and need_volume:
+        base_vols: list[Decimal] = []
+        quote_vols: list[Decimal] = []
+        taker_buy_quote: list[Decimal] = []
+        try:
+            for row in snap.klines:
+                if not isinstance(row, list) or len(row) < 8:
+                    continue
+                base_vols.append(Decimal(str(row[5])))
+                quote_vols.append(Decimal(str(row[7])))
+                if len(row) >= 11:
+                    taker_buy_quote.append(Decimal(str(row[10])))
+        except Exception:
+            base_vols = []
+            quote_vols = []
+            taker_buy_quote = []
+        bid_qty = None
+        ask_qty = None
+        if isinstance(snap.book_ticker, dict):
+            try:
+                bid_qty = Decimal(str(snap.book_ticker.get("bidQty")))
+                ask_qty = Decimal(str(snap.book_ticker.get("askQty")))
+            except Exception:
+                bid_qty = None
+                ask_qty = None
+        vm = compute_volume_metrics(
+            base_volumes=base_vols,
+            quote_volumes=quote_vols,
+            closes=snap.candles.closes,
+            taker_buy_quote_volumes=taker_buy_quote or None,
+            bid_qty=bid_qty,
+            ask_qty=ask_qty,
+            depth_bids=depth_bids,
+            depth_asks=depth_asks,
+            window_fast=vol_window_fast,
+            window_slow=vol_window_slow,
+            spike_ratio=Decimal(str(vol_spike_ratio)),
+            z_threshold=Decimal(str(vol_zscore)),
+            buy_ratio_hi=Decimal(str(vol_buy_ratio)),
+            buy_ratio_lo=Decimal(str(vol_sell_ratio)),
+            wall_ratio=Decimal(str(vol_wall_ratio)),
+            imbalance_threshold=Decimal(str(vol_imbalance)),
+        )
+        payload["volume_base_last"] = str(vm.base_last) if vm.base_last is not None else None
+        payload["volume_quote_last"] = str(vm.quote_last) if vm.quote_last is not None else None
+        payload["volume_quote_avg_20"] = str(vm.quote_avg_20) if vm.quote_avg_20 is not None else None
+        payload["volume_quote_avg_50"] = str(vm.quote_avg_50) if vm.quote_avg_50 is not None else None
+        payload["volume_quote_std_20"] = str(vm.quote_std_20) if vm.quote_std_20 is not None else None
+        payload["volume_quote_zscore_20"] = str(vm.quote_zscore_20) if vm.quote_zscore_20 is not None else None
+        payload["volume_quote_trend"] = vm.quote_trend
+        payload["volume_spike"] = str(vm.spike) if vm.spike is not None else None
+        payload["taker_buy_ratio"] = str(vm.taker_buy_ratio) if vm.taker_buy_ratio is not None else None
+        payload["taker_buy_ratio_avg20"] = str(vm.taker_buy_ratio_avg20) if vm.taker_buy_ratio_avg20 is not None else None
+        payload["buy_pressure"] = vm.buy_pressure
+        payload["sustained_buy_pressure"] = str(vm.sustained_buy_pressure) if vm.sustained_buy_pressure is not None else None
+        payload["sustained_sell_pressure"] = str(vm.sustained_sell_pressure) if vm.sustained_sell_pressure is not None else None
+        payload["obv"] = str(vm.obv) if vm.obv is not None else None
+        payload["obv_trend"] = vm.obv_trend
+        payload["vwap_20"] = str(vm.vwap_20) if vm.vwap_20 is not None else None
+        payload["price_vs_vwap_pct"] = str(vm.price_vs_vwap_pct) if vm.price_vs_vwap_pct is not None else None
+        payload["vol_price_confirmation"] = vm.vol_price_confirmation
+        payload["bid_qty"] = str(vm.bid_qty) if vm.bid_qty is not None else None
+        payload["ask_qty"] = str(vm.ask_qty) if vm.ask_qty is not None else None
+        payload["book_imbalance"] = str(vm.book_imbalance) if vm.book_imbalance is not None else None
+        payload["liquidity_zones"] = vm.liquidity_zones
+        payload["buy_wall_price"] = str(vm.buy_wall_price) if vm.buy_wall_price is not None else None
+        payload["buy_wall_qty"] = str(vm.buy_wall_qty) if vm.buy_wall_qty is not None else None
+        payload["sell_wall_price"] = str(vm.sell_wall_price) if vm.sell_wall_price is not None else None
+        payload["sell_wall_qty"] = str(vm.sell_wall_qty) if vm.sell_wall_qty is not None else None
+
+    if not cache_hit and need_execution:
+        best_bid = None
+        best_ask = None
+        if isinstance(snap.book_ticker, dict):
+            try:
+                best_bid = Decimal(str(snap.book_ticker.get("bidPrice")))
+                best_ask = Decimal(str(snap.book_ticker.get("askPrice")))
+            except Exception:
+                best_bid = None
+                best_ask = None
+        if depth_bids is None or depth_asks is None:
+            payload["execution_available"] = "False"
+            payload["execution_unavailable_reason"] = "missing_depth"
+        else:
+            em = compute_execution_metrics(
+                bids=depth_bids,
+                asks=depth_asks,
+                best_bid=best_bid,
+                best_ask=best_ask,
+                depth_levels=int(exec_depth),
+                notional=exec_notional,
+                side=str(exec_side),
+            )
+            payload["execution_available"] = str(em.available)
+            payload["execution_unavailable_reason"] = em.unavailable_reason
+            payload["exec_mid"] = str(em.mid_price) if em.mid_price is not None else None
+            payload["exec_best_bid"] = str(em.best_bid) if em.best_bid is not None else None
+            payload["exec_best_ask"] = str(em.best_ask) if em.best_ask is not None else None
+            payload["exec_spread_abs"] = str(em.spread_abs) if em.spread_abs is not None else None
+            payload["exec_spread_pct"] = str(em.spread_pct) if em.spread_pct is not None else None
+            payload["exec_spread_quality"] = em.spread_quality
+            payload["exec_slippage_pct"] = str(em.slippage_pct) if em.slippage_pct is not None else None
+            payload["exec_effective_spread_pct"] = str(em.effective_spread_pct) if em.effective_spread_pct is not None else None
+            payload["exec_market_impact_pct"] = str(em.market_impact_pct) if em.market_impact_pct is not None else None
+            payload["exec_avg_fill_price"] = str(em.avg_fill_price) if em.avg_fill_price is not None else None
+            payload["exec_notional_used"] = str(em.notional_used) if em.notional_used is not None else None
+            payload["exec_fill_ratio_pct"] = str(em.fill_ratio_pct) if em.fill_ratio_pct is not None else None
+            payload["exec_levels_used"] = str(em.levels_used) if em.levels_used is not None else None
+            payload["exec_side"] = em.side
+            payload["exec_depth_levels"] = str(em.depth_levels) if em.depth_levels is not None else None
+            payload["exec_bid_depth_notional"] = str(em.bid_depth_notional) if em.bid_depth_notional is not None else None
+            payload["exec_ask_depth_notional"] = str(em.ask_depth_notional) if em.ask_depth_notional is not None else None
+            payload["exec_notional_available"] = str(em.notional_available) if em.notional_available is not None else None
+            payload["exec_depth_imbalance"] = str(em.depth_imbalance) if em.depth_imbalance is not None else None
+            payload["exec_depth_spread_pct"] = str(em.depth_spread_pct) if em.depth_spread_pct is not None else None
+
+    if not cache_hit and getattr(args, "quant", False):
+        quant_unavailable = None
+        bench_klines: list[list] = []
+        try:
+            bench_klines = client.get_klines(
+                symbol=quant_benchmark,
+                interval=timeframe,
+                limit=len(snap.klines),
+            )
+        except Exception:
+            quant_unavailable = "benchmark_fetch_failed"
+            bench_klines = []
+        quote_vols_float: list[float] = []
+        try:
+            for row in snap.klines:
+                if isinstance(row, list) and len(row) >= 8:
+                    quote_vols_float.append(float(row[7]))
+        except Exception:
+            quote_vols_float = []
+        qm = compute_quant_metrics(
+            target_klines=snap.klines,
+            benchmark_klines=bench_klines,
+            window=quant_window,
+            benchmark_symbol=quant_benchmark,
+            corr_method=corr_method,
+            spread_pct=float(payload.get("spread_pct")) if payload.get("spread_pct") not in (None, "") else None,
+            range_pct=float(payload.get("volatility_pct")) if payload.get("volatility_pct") not in (None, "") else None,
+            quote_volumes=quote_vols_float or None,
+        )
+        if quant_unavailable and qm.available:
+            quant_unavailable = None
+        payload["quant_available"] = str(qm.available)
+        payload["quant_unavailable_reason"] = quant_unavailable or qm.unavailable_reason
+        payload["quant_window"] = str(qm.window)
+        payload["quant_benchmark"] = qm.benchmark
+        payload["quant_corr_method"] = qm.corr_method
+        payload["quant_corr"] = str(qm.correlation) if qm.correlation is not None else None
+        payload["quant_beta"] = str(qm.beta) if qm.beta is not None else None
+        payload["quant_return_zscore"] = str(qm.return_zscore) if qm.return_zscore is not None else None
+        payload["quant_realized_vol"] = str(qm.realized_vol) if qm.realized_vol is not None else None
+        payload["quant_vol_regime"] = qm.vol_regime
+        payload["quant_mean_dev_pct"] = str(qm.mean_dev_pct) if qm.mean_dev_pct is not None else None
+        payload["quant_mean_reversion_state"] = qm.mean_reversion_state
+        payload["quant_max_drawdown_pct"] = str(qm.max_drawdown_pct) if qm.max_drawdown_pct is not None else None
+        payload["quant_sharpe_ratio"] = str(qm.sharpe_ratio) if qm.sharpe_ratio is not None else None
+        payload["quant_calmar_ratio"] = str(qm.calmar_ratio) if qm.calmar_ratio is not None else None
+        payload["quant_skewness"] = str(qm.skewness) if qm.skewness is not None else None
+        payload["quant_kurtosis"] = str(qm.kurtosis) if qm.kurtosis is not None else None
+        payload["quant_log_return"] = str(qm.log_return) if qm.log_return is not None else None
+        payload["quant_ret_mean"] = str(qm.rolling_return_mean) if qm.rolling_return_mean is not None else None
+        payload["quant_ret_std"] = str(qm.rolling_return_std) if qm.rolling_return_std is not None else None
+        payload["quant_price_vs_ema_pct"] = str(qm.price_vs_ema_pct) if qm.price_vs_ema_pct is not None else None
+        payload["quant_rsi"] = str(qm.rsi) if qm.rsi is not None else None
+        payload["quant_macd_hist"] = str(qm.macd_hist) if qm.macd_hist is not None else None
+        payload["quant_atr_norm"] = str(qm.atr_norm) if qm.atr_norm is not None else None
+        payload["quant_volume_zscore"] = str(qm.volume_zscore) if qm.volume_zscore is not None else None
+        payload["quant_spread_pct"] = str(qm.spread_pct) if qm.spread_pct is not None else None
+        payload["quant_range_pct"] = str(qm.range_pct) if qm.range_pct is not None else None
+
+    if not cache_hit and need_structure:
+        highs: list[Decimal] = []
+        lows: list[Decimal] = []
+        try:
+            for row in snap.klines:
+                if not isinstance(row, list) or len(row) < 5:
+                    continue
+                highs.append(Decimal(str(row[2])))
+                lows.append(Decimal(str(row[3])))
+        except Exception:
+            highs = []
+            lows = []
+        atr_pct = None
+        if payload.get("atr_pct") is not None:
+            try:
+                atr_pct = Decimal(str(payload.get("atr_pct")))
+            except Exception:
+                atr_pct = None
+        sm = compute_structure_metrics(
+            highs=highs,
+            lows=lows,
+            closes=snap.candles.closes,
+            atr_pct=atr_pct,
+            volume_trend=payload.get("volume_quote_trend"),
+            buy_pressure=payload.get("buy_pressure"),
+        )
+        payload["structure_trend"] = sm.structure_trend
+        payload["range_state"] = sm.range_state
+        payload["range_high"] = str(sm.range_high) if sm.range_high is not None else None
+        payload["range_low"] = str(sm.range_low) if sm.range_low is not None else None
+        payload["range_width_pct"] = str(sm.range_width_pct) if sm.range_width_pct is not None else None
+        payload["bos"] = str(sm.bos) if sm.bos is not None else None
+        payload["bos_direction"] = sm.bos_direction
+        payload["bos_streak"] = str(sm.bos_streak) if sm.bos_streak is not None else None
+        payload["choch"] = str(sm.choch) if sm.choch is not None else None
+        payload["choch_direction"] = sm.choch_direction
+        payload["accumulation"] = sm.accumulation
+        payload["price_zone"] = sm.price_zone
+        payload["last_swing_high"] = str(sm.last_swing_high) if sm.last_swing_high is not None else None
+        payload["last_swing_low"] = str(sm.last_swing_low) if sm.last_swing_low is not None else None
+        payload["prev_swing_high"] = str(sm.prev_swing_high) if sm.prev_swing_high is not None else None
+        payload["prev_swing_low"] = str(sm.prev_swing_low) if sm.prev_swing_low is not None else None
+        payload["swing_high_history"] = str(list(sm.swing_high_history)) if sm.swing_high_history else None
+        payload["swing_low_history"] = str(list(sm.swing_low_history)) if sm.swing_low_history else None
+        payload["fvg_count"] = str(len(sm.fvg_list)) if sm.fvg_list is not None else None
+        payload["last_fvg_direction"] = sm.last_fvg.direction if sm.last_fvg is not None else None
+        payload["last_fvg_high"] = str(sm.last_fvg.gap_high) if sm.last_fvg is not None else None
+        payload["last_fvg_low"] = str(sm.last_fvg.gap_low) if sm.last_fvg is not None else None
+        payload["last_fvg_mitigated"] = str(sm.last_fvg.mitigated) if sm.last_fvg is not None else None
+
+    if not cache_hit and need_price_action:
+        opens: list[Decimal] = []
+        highs: list[Decimal] = []
+        lows: list[Decimal] = []
+        closes: list[Decimal] = []
+        volumes: list[Decimal] = []
+        try:
+            for row in snap.klines:
+                if not isinstance(row, list) or len(row) < 6:
+                    continue
+                opens.append(Decimal(str(row[1])))
+                highs.append(Decimal(str(row[2])))
+                lows.append(Decimal(str(row[3])))
+                closes.append(Decimal(str(row[4])))
+                volumes.append(Decimal(str(row[5])))
+        except Exception:
+            opens, highs, lows, closes, volumes = [], [], [], [], []
+        if len(opens) < 5:
+            payload["price_action_available"] = "False"
+            payload["pa_unavailable_reason"] = "insufficient_candles"
+        else:
+            pm = compute_price_action_metrics(
+                opens=opens,
+                highs=highs,
+                lows=lows,
+                closes=closes,
+                volumes=volumes or None,
+            )
+            payload["price_action_available"] = "True"
+            payload["pa_support_level"] = str(pm.support_level) if pm.support_level is not None else None
+            payload["pa_support_strength"] = str(pm.support_strength) if pm.support_strength is not None else None
+            payload["pa_support_distance_pct"] = str(pm.support_distance_pct) if pm.support_distance_pct is not None else None
+            payload["pa_resistance_level"] = str(pm.resistance_level) if pm.resistance_level is not None else None
+            payload["pa_resistance_strength"] = str(pm.resistance_strength) if pm.resistance_strength is not None else None
+            payload["pa_resistance_distance_pct"] = str(pm.resistance_distance_pct) if pm.resistance_distance_pct is not None else None
+            payload["pa_structure_type"] = pm.structure_type
+            payload["pa_last_swing_high"] = str(pm.last_swing_high) if pm.last_swing_high is not None else None
+            payload["pa_last_swing_low"] = str(pm.last_swing_low) if pm.last_swing_low is not None else None
+            payload["pa_breakout"] = str(pm.breakout)
+            payload["pa_breakdown"] = str(pm.breakdown)
+            payload["pa_breakout_level"] = str(pm.breakout_level) if pm.breakout_level is not None else None
+            payload["pa_breakdown_level"] = str(pm.breakdown_level) if pm.breakdown_level is not None else None
+            payload["pa_breakout_strength"] = pm.breakout_strength
+            if pm.patterns:
+                payload["pa_patterns_json"] = _safe_json(
+                    [
+                        {
+                            "pattern_name": p.pattern_name,
+                            "direction": p.direction,
+                            "candle_count": p.candle_count,
+                            "bar_index": p.bar_index,
+                            "reliability": str(p.reliability) if p.reliability is not None else None,
+                            "context_valid": p.context_valid,
+                            "strength_score": str(p.strength_score) if p.strength_score is not None else None,
+                        }
+                        for p in pm.patterns
+                    ]
+                )
+            else:
+                payload["pa_patterns_json"] = None
+            payload["pa_last_pattern"] = pm.last_pattern
+            payload["pa_dominant_bias"] = pm.dominant_bias
+            payload["pa_signal_count"] = str(pm.signal_count)
+            payload["pa_confluence"] = str(pm.confluence)
+    elif getattr(args, "price_action", False):
+        payload["price_action_available"] = "False"
+        payload["pa_unavailable_reason"] = "missing_ohlc"
+
+    if not cache_hit and risk_on:
+        def _dec(val: object) -> Decimal | None:
+            if val in (None, ""):
+                return None
+            try:
+                return Decimal(str(val))
+            except Exception:
+                return None
+
+        def _bool_from_str(val: object) -> bool | None:
+            if val in (None, ""):
+                return None
+            s = str(val).strip().lower()
+            if s == "true":
+                return True
+            if s == "false":
+                return False
+            return None
+
+        def _infer_quote_asset(sym: str) -> str | None:
+            for q in ("USDT", "USDC", "BUSD", "FDUSD", "TUSD", "BTC", "ETH", "BNB"):
+                if sym.endswith(q):
+                    return q
+            return None
+
+        entry = risk_entry or _dec(payload.get("exec_mid")) or _dec(payload.get("last_price"))
+        if entry is None:
+            payload["risk_available"] = "False"
+            payload["risk_rejection_reason"] = "missing_entry_price"
+        else:
+            acct = risk_account_balance
+            if acct is None:
+                quote_asset = _infer_quote_asset(symbol)
+                if quote_asset:
+                    try:
+                        with connect(db_path) as conn:
+                            state = StateManager(conn)
+                            acct = state.get_cached_balance_free(asset=quote_asset)
+                    except Exception:
+                        acct = None
+            if acct is None:
+                payload["risk_available"] = "False"
+                payload["risk_rejection_reason"] = "missing_account_balance"
+            else:
+                last_low = None
+                last_high = None
+                try:
+                    if snap.klines:
+                        last_low = _dec(snap.klines[-1][3])
+                        last_high = _dec(snap.klines[-1][2])
+                except Exception:
+                    last_low = None
+                    last_high = None
+
+                rm = compute_risk_metrics(
+                    entry_price=entry,
+                    side=risk_side,
+                    account_balance=acct,
+                    risk_pct=risk_pct,
+                    max_position_pct=risk_max_position_pct,
+                    atr=_dec(payload.get("atr")),
+                    vol_regime=payload.get("vol_regime"),
+                    chandelier_long=_dec(payload.get("chandelier_long")),
+                    chandelier_short=_dec(payload.get("chandelier_short")),
+                    structure_trend=payload.get("structure_trend"),
+                    last_swing_low=_dec(payload.get("last_swing_low")),
+                    last_swing_high=_dec(payload.get("last_swing_high")),
+                    prev_swing_low=_dec(payload.get("prev_swing_low")),
+                    prev_swing_high=_dec(payload.get("prev_swing_high")),
+                    price_zone=payload.get("price_zone"),
+                    bos_streak=int(payload.get("bos_streak")) if payload.get("bos_streak") not in (None, "") else None,
+                    choch=_bool_from_str(payload.get("choch")),
+                    adx=_dec(payload.get("adx")),
+                    adx_trend_strength=payload.get("adx_trend_strength"),
+                    ema_50_200_crossover=payload.get("ema_50_200_crossover"),
+                    trend_bias=payload.get("trend_bias"),
+                    composite_signal=payload.get("composite_signal"),
+                    rsi_zone=payload.get("rsi_zone"),
+                    macd_bias=payload.get("macd_bias"),
+                    slippage_pct=_dec(payload.get("exec_slippage_pct")),
+                    spread_pct=_dec(payload.get("exec_spread_pct")),
+                    notional_available=_dec(payload.get("exec_notional_available")),
+                    fill_ratio_pct=_dec(payload.get("exec_fill_ratio_pct")),
+                    buy_pressure=payload.get("buy_pressure"),
+                    sustained_buy_pressure=_bool_from_str(payload.get("sustained_buy_pressure")),
+                    vol_price_confirmation=payload.get("vol_price_confirmation"),
+                    last_candle_low=last_low,
+                    last_candle_high=last_high,
+                    last_fvg_direction=payload.get("last_fvg_direction"),
+                    last_fvg_low=_dec(payload.get("last_fvg_low")),
+                    last_fvg_high=_dec(payload.get("last_fvg_high")),
+                    ichi_senkou_a=_dec(payload.get("ichi_senkou_a")),
+                    ichi_senkou_b=_dec(payload.get("ichi_senkou_b")),
+                )
+
+                payload["risk_available"] = "True"
+                payload["risk_viable"] = str(rm.viable)
+                payload["risk_rejection_reason"] = rm.rejection_reason
+                payload["risk_score"] = str(rm.risk_score) if rm.risk_score is not None else None
+                payload["risk_score_breakdown"] = _safe_json(rm.risk_score_breakdown) if rm.risk_score_breakdown else None
+                payload["risk_entry_price"] = str(rm.entry_price) if rm.entry_price is not None else None
+                payload["risk_side"] = rm.side
+                payload["risk_effective_entry"] = str(rm.effective_entry) if rm.effective_entry is not None else None
+                payload["risk_stop_price"] = str(rm.stop_price) if rm.stop_price is not None else None
+                payload["risk_stop_method"] = rm.stop_method
+                payload["risk_stop_distance_pct"] = str(rm.stop_distance_pct) if rm.stop_distance_pct is not None else None
+                payload["risk_stop_atr_multiple"] = str(rm.stop_atr_multiple) if rm.stop_atr_multiple is not None else None
+                payload["risk_stop_candidates"] = _safe_json(rm.stop_candidates) if rm.stop_candidates else None
+                payload["risk_tp1"] = str(rm.tp1) if rm.tp1 is not None else None
+                payload["risk_tp2"] = str(rm.tp2) if rm.tp2 is not None else None
+                payload["risk_tp3"] = str(rm.tp3) if rm.tp3 is not None else None
+                payload["risk_tp_fvg"] = str(rm.tp_fvg) if rm.tp_fvg is not None else None
+                payload["risk_tp_structure"] = str(rm.tp_structure) if rm.tp_structure is not None else None
+                payload["risk_tp_cloud"] = str(rm.tp_cloud) if rm.tp_cloud is not None else None
+                payload["risk_reward_risk_ratio"] = str(rm.reward_risk_ratio) if rm.reward_risk_ratio is not None else None
+                payload["risk_position_size_base"] = str(rm.position_size_base) if rm.position_size_base is not None else None
+                payload["risk_position_size_quote"] = str(rm.position_size_quote) if rm.position_size_quote is not None else None
+                payload["risk_position_size_pct"] = str(rm.position_size_pct) if rm.position_size_pct is not None else None
+                payload["risk_max_loss_quote"] = str(rm.max_loss_quote) if rm.max_loss_quote is not None else None
+                payload["risk_pct_used"] = str(rm.risk_pct_used) if rm.risk_pct_used is not None else None
+                payload["risk_caps_applied"] = _safe_json(rm.caps_applied) if rm.caps_applied else None
+                payload["risk_suggested_leverage"] = str(rm.suggested_leverage) if rm.suggested_leverage is not None else None
+                payload["risk_liquidation_price"] = str(rm.liquidation_price) if rm.liquidation_price is not None else None
+                payload["risk_liquidation_distance_pct"] = str(rm.liquidation_distance_pct) if rm.liquidation_distance_pct is not None else None
+                payload["risk_flag_wide_stop"] = str(rm.wide_stop)
+                payload["risk_flag_concentration_cap"] = str(rm.concentration_cap)
+                payload["risk_flag_liquidity_cap"] = str(rm.liquidity_cap)
+                payload["risk_flag_liquidation_warning"] = str(rm.liquidation_warning)
+                payload["risk_flag_low_adx_warning"] = str(rm.low_adx_warning)
+
+    if not cache_hit and getattr(args, "crypto", False):
+        futures_market = "usdtm" if symbol.endswith("USDT") else "coinm"
+        crypto = compute_crypto_metrics(
+            symbol=symbol,
+            futures_market=futures_market,
+            timeout_s=cfg.binance_timeout_s,
+            tls_verify=cfg.binance_tls_verify if not insecure else False,
+            ca_bundle_path=ca_bundle.expanduser() if ca_bundle else cfg.binance_ca_bundle_path,
+        )
+        payload["futures_market"] = crypto.futures_market
+        payload["funding_rate"] = crypto.funding_rate
+        payload["next_funding_time"] = crypto.next_funding_time
+        payload["open_interest"] = crypto.open_interest
+
+    if getattr(args, "strict", False):
+        if getattr(args, "momentum", False):
+            if any(payload.get(k) in (None, "") for k in ("rsi", "macd", "macd_signal", "macd_hist", "stoch_rsi")):
+                print("ERROR: momentum indicators unavailable (strict mode)")
+                return 2
+        if getattr(args, "trend", False):
+            if any(payload.get(k) in (None, "") for k in ("ema_20", "ema_50", "sma_20", "sma_50")):
+                print("ERROR: trend indicators unavailable (strict mode)")
+                return 2
+        if getattr(args, "volatility", False):
+            if any(payload.get(k) in (None, "") for k in ("atr", "bb_upper", "bb_mid", "bb_lower", "bb_width_pct")):
+                print("ERROR: volatility indicators unavailable (strict mode)")
+                return 2
+        if getattr(args, "crypto", False):
+            if any(payload.get(k) in (None, "") for k in ("funding_rate", "open_interest")):
+                print("ERROR: crypto indicators unavailable (strict mode)")
+                return 2
+        if getattr(args, "quant", False):
+            if payload.get("quant_available") != "True":
+                print("ERROR: quant indicators unavailable (strict mode)")
+                return 2
+        if getattr(args, "execution", False):
+            if payload.get("execution_available") != "True":
+                print("ERROR: execution indicators unavailable (strict mode)")
+                return 2
+        if getattr(args, "price_action", False):
+            if payload.get("price_action_available") != "True":
+                print("ERROR: price-action indicators unavailable (strict mode)")
+                return 2
+        if getattr(args, "risk", False):
+            if payload.get("risk_available") != "True":
+                print("ERROR: risk indicators unavailable (strict mode)")
+                return 2
+
+    if cache_ttl_s > 0:
+        payload["cache"] = "hit" if cache_hit else "miss"
+
+    if getattr(args, "json", False):
+        print(_json.dumps(payload, separators=(",", ":")))
+    elif getattr(args, "compact", False):
+        summary = (
+            f"{symbol} {timeframe} candles={payload.get('candle_count')} price={payload.get('last_price')} spread_pct={payload.get('spread_pct')} "
+            f"chg24h={payload.get('change_pct_24h')} vol24h={payload.get('volume_quote_24h')} cond={cond}"
+        )
+        if getattr(args, "volume", False):
+            summary += (
+                f" vol_trend={payload.get('volume_quote_trend')}"
+                f" spike={payload.get('volume_spike')}"
+                f" pressure={payload.get('buy_pressure')}"
+            )
+        if getattr(args, "price_action", False):
+            summary += (
+                f" pa_bias={payload.get('pa_dominant_bias')}"
+                f" pa_breakout={payload.get('pa_breakout')}"
+            )
+        if getattr(args, "risk", False):
+            if payload.get("risk_available") == "True":
+                summary += (
+                    f" risk_score={payload.get('risk_score')}"
+                    f" rr={payload.get('risk_reward_risk_ratio')}"
+                    f" viable={payload.get('risk_viable')}"
+                )
+            else:
+                summary += " risk=unavailable"
+        if cache_ttl_s > 0:
+            summary += f" cache={payload.get('cache')}"
+        print(summary)
+    elif getattr(args, "table", False):
+        print("MARKET STATUS")
+        for k, v in payload.items():
+            print(f"{k:<18} {v}")
+    else:
+        print("Market Status")
+        print(f"- Symbol: {symbol}")
+        print(f"- Timeframe: {timeframe}")
+        print(f"- Candles: {payload.get('candle_count')}")
+        print(f"- Last Price: {payload.get('last_price')}")
+        if payload.get("bid") is not None and payload.get("ask") is not None:
+            print(f"- Best Bid: {payload.get('bid')}")
+            print(f"- Best Ask: {payload.get('ask')}")
+        if payload.get("spread_pct") is not None:
+            print(f"- Spread %: {payload.get('spread_pct')}")
+        if payload.get("high_24h") is not None:
+            print(f"- 24h High: {payload.get('high_24h')}")
+        if payload.get("low_24h") is not None:
+            print(f"- 24h Low: {payload.get('low_24h')}")
+        if payload.get("change_pct_24h") is not None:
+            print(f"- 24h Change %: {payload.get('change_pct_24h')}")
+        if payload.get("volume_quote_24h") is not None:
+            print(f"- 24h Volume (quote): {payload.get('volume_quote_24h')}")
+        print(f"- Condition Summary: {cond} (momentum_pct={payload.get('momentum_pct')}, volatility_pct={payload.get('volatility_pct')})")
+        if getattr(args, "momentum", False):
+            momentum_bias = payload.get("composite_signal")
+            if momentum_bias:
+                print(f"- Momentum Bias: {momentum_bias}")
+        if getattr(args, "trend", False):
+            trend_bias = payload.get("trend_bias")
+            adx_strength = payload.get("adx_trend_strength")
+            ichi_bias = payload.get("ichi_cloud_bias")
+            if trend_bias or adx_strength or ichi_bias:
+                pieces = []
+                if trend_bias:
+                    pieces.append(f"bias={trend_bias}")
+                if adx_strength:
+                    pieces.append(f"adx={adx_strength}")
+                if ichi_bias:
+                    pieces.append(f"ichimoku={ichi_bias}")
+                print(f"- Trend Bias: {' '.join(pieces)}")
+        if getattr(args, "volatility", False):
+            vol_regime = payload.get("vol_regime")
+            squeeze = payload.get("squeeze")
+            bb_pos = payload.get("bb_position")
+            if vol_regime or squeeze or bb_pos:
+                pieces = []
+                if vol_regime:
+                    pieces.append(f"regime={vol_regime}")
+                if squeeze is not None:
+                    pieces.append(f"squeeze={squeeze}")
+                if bb_pos:
+                    pieces.append(f"bb_pos={bb_pos}")
+                print(f"- Volatility Bias: {' '.join(pieces)}")
+        if getattr(args, "volume", False):
+            vol_trend = payload.get("volume_quote_trend")
+            spike = payload.get("volume_spike")
+            buy_pressure = payload.get("buy_pressure")
+            if vol_trend or spike or buy_pressure:
+                pieces = []
+                if vol_trend:
+                    pieces.append(f"trend={vol_trend}")
+                if spike is not None:
+                    pieces.append(f"spike={spike}")
+                if buy_pressure:
+                    pieces.append(f"pressure={buy_pressure}")
+                print(f"- Volume Bias: {' '.join(pieces)}")
+        if getattr(args, "structure", False):
+            structure_trend = payload.get("structure_trend")
+            range_state = payload.get("range_state")
+            bos = payload.get("bos")
+            choch = payload.get("choch")
+            if structure_trend or range_state or bos or choch:
+                pieces = []
+                if structure_trend:
+                    pieces.append(f"trend={structure_trend}")
+                if range_state:
+                    pieces.append(f"range={range_state}")
+                if bos is not None:
+                    pieces.append(f"bos={bos}")
+                if choch is not None:
+                    pieces.append(f"choch={choch}")
+                print(f"- Structure Bias: {' '.join(pieces)}")
+        if getattr(args, "price_action", False):
+            print("Price Action")
+            print(f"- Support: {payload.get('pa_support_level')} (strength={payload.get('pa_support_strength')}, dist_pct={payload.get('pa_support_distance_pct')})")
+            print(f"- Resistance: {payload.get('pa_resistance_level')} (strength={payload.get('pa_resistance_strength')}, dist_pct={payload.get('pa_resistance_distance_pct')})")
+            print(f"- Structure: {payload.get('pa_structure_type')} last_high={payload.get('pa_last_swing_high')} last_low={payload.get('pa_last_swing_low')}")
+            if payload.get("pa_breakout") == "True":
+                print(f"- Breakout: level={payload.get('pa_breakout_level')} strength={payload.get('pa_breakout_strength')}")
+            if payload.get("pa_breakdown") == "True":
+                print(f"- Breakdown: level={payload.get('pa_breakdown_level')} strength={payload.get('pa_breakout_strength')}")
+            print(f"- Patterns: last={payload.get('pa_last_pattern')} dominant_bias={payload.get('pa_dominant_bias')} confluence={payload.get('pa_confluence')}")
+        if getattr(args, "execution", False):
+            if payload.get("execution_available") == "True":
+                spread_q = payload.get("exec_spread_quality")
+                slip = payload.get("exec_slippage_pct")
+                imb = payload.get("exec_depth_imbalance")
+                pieces = []
+                if spread_q:
+                    pieces.append(f"spread={spread_q}")
+                if slip is not None:
+                    pieces.append(f"slip={slip}")
+                if imb is not None:
+                    pieces.append(f"depth_imb={imb}")
+                if pieces:
+                    print(f"- Execution Summary: {' '.join(pieces)}")
+            else:
+                reason = payload.get("execution_unavailable_reason") or "unavailable"
+                print(f"- Execution Summary: unavailable ({reason})")
+        if getattr(args, "quant", False):
+            if payload.get("quant_available") == "True":
+                pieces = []
+                if payload.get("quant_corr") is not None:
+                    pieces.append(f"corr={payload.get('quant_corr')}")
+                if payload.get("quant_return_zscore") is not None:
+                    pieces.append(f"z={payload.get('quant_return_zscore')}")
+                if payload.get("quant_vol_regime"):
+                    pieces.append(f"regime={payload.get('quant_vol_regime')}")
+                if payload.get("quant_mean_reversion_state"):
+                    pieces.append(f"mean_state={payload.get('quant_mean_reversion_state')}")
+                if pieces:
+                    print(f"- Quant Summary: {' '.join(pieces)}")
+            else:
+                reason = payload.get("quant_unavailable_reason") or "unavailable"
+                print(f"- Quant Summary: unavailable ({reason})")
+        if getattr(args, "momentum", False):
+            print("Momentum")
+            print(f"- RSI: {payload.get('rsi')}")
+            print(f"- RSI Prev: {payload.get('rsi_prev')}")
+            print(f"- RSI Zone: {payload.get('rsi_zone')}")
+            print(f"- MACD: {payload.get('macd')}")
+            print(f"- MACD Signal: {payload.get('macd_signal')}")
+            print(f"- MACD Hist: {payload.get('macd_hist')}")
+            print(f"- MACD Bias: {payload.get('macd_bias')}")
+            print(f"- Stoch RSI: {payload.get('stoch_rsi')}")
+            if payload.get("stoch_rsi_k") is not None or payload.get("stoch_rsi_d") is not None:
+                print(f"- Stoch RSI K: {payload.get('stoch_rsi_k')}")
+                print(f"- Stoch RSI D: {payload.get('stoch_rsi_d')}")
+                print(f"- Stoch RSI Bias: {payload.get('stoch_rsi_bias')}")
+            print(f"- Williams %R: {payload.get('williams_r')}")
+            print(f"- Williams %R Zone: {payload.get('williams_r_zone')}")
+            print(f"- CCI: {payload.get('cci')}")
+            print(f"- CCI Zone: {payload.get('cci_zone')}")
+            print(f"- ROC: {payload.get('roc')}")
+            print(f"- ROC Bias: {payload.get('roc_bias')}")
+            print(f"- Composite Signal: {payload.get('composite_signal')}")
+            print(f"- RSI Bullish Divergence: {payload.get('rsi_bullish_divergence')}")
+            print(f"- RSI Bearish Divergence: {payload.get('rsi_bearish_divergence')}")
+        if getattr(args, "trend", False):
+            print("Trend")
+            print(f"- EMA 20: {payload.get('ema_20')}")
+            print(f"- EMA 50: {payload.get('ema_50')}")
+            print(f"- EMA 200: {payload.get('ema_200')}")
+            print(f"- SMA 20: {payload.get('sma_20')}")
+            print(f"- SMA 50: {payload.get('sma_50')}")
+            print(f"- SMA 200: {payload.get('sma_200')}")
+            print(f"- Crossover: {payload.get('trend_crossover')}")
+            print(f"- Crossover Event: {payload.get('trend_crossover_event')}")
+            print(f"- Crossover Strength %: {payload.get('trend_crossover_strength_pct')}")
+            print(f"- EMA 50/200: {payload.get('ema_50_200_crossover')} ({payload.get('ema_50_200_event')})")
+            print(f"- EMA 50/200 Strength %: {payload.get('ema_50_200_strength_pct')}")
+            print(f"- SMA 20/50: {payload.get('sma_20_50_crossover')} ({payload.get('sma_20_50_event')})")
+            print(f"- SMA 50/200: {payload.get('sma_50_200_crossover')} ({payload.get('sma_50_200_event')})")
+            print(f"- ADX: {payload.get('adx')} (+DI={payload.get('adx_pos')}, -DI={payload.get('adx_neg')})")
+            print(f"- ADX Strength: {payload.get('adx_trend_strength')}")
+            print(f"- Ichimoku Tenkan: {payload.get('ichi_tenkan')}")
+            print(f"- Ichimoku Kijun: {payload.get('ichi_kijun')}")
+            print(f"- Ichimoku Senkou A: {payload.get('ichi_senkou_a')}")
+            print(f"- Ichimoku Senkou B: {payload.get('ichi_senkou_b')}")
+            print(f"- Ichimoku Cloud Bias: {payload.get('ichi_cloud_bias')}")
+            print(f"- Price vs EMA20 %: {payload.get('price_vs_ema20_pct')}")
+            print(f"- Price vs EMA50 %: {payload.get('price_vs_ema50_pct')}")
+            print(f"- Price vs EMA200 %: {payload.get('price_vs_ema200_pct')}")
+            print(f"- Trend Bias: {payload.get('trend_bias')}")
+            if len(snap.candles.closes) < 200:
+                print(f"- Warning: need 200 candles for EMA/SMA 200 (have {len(snap.candles.closes)})")
+            if getattr(args, "debug", False):
+                print("Trend Debug")
+                print(f"- EMA20 prev: {payload.get('ema_20_prev')}")
+                print(f"- EMA50 prev: {payload.get('ema_50_prev')}")
+                print(f"- EMA200 prev: {payload.get('ema_200_prev')}")
+                print(f"- SMA20 prev: {payload.get('sma_20_prev')}")
+                print(f"- SMA50 prev: {payload.get('sma_50_prev')}")
+                print(f"- SMA200 prev: {payload.get('sma_200_prev')}")
+        if getattr(args, "volatility", False):
+            print("Volatility")
+            print(f"- ATR: {payload.get('atr')}")
+            print(f"- ATR %: {payload.get('atr_pct')}")
+            print(f"- BB Upper: {payload.get('bb_upper')}")
+            print(f"- BB Mid: {payload.get('bb_mid')}")
+            print(f"- BB Lower: {payload.get('bb_lower')}")
+            print(f"- BB Width %: {payload.get('bb_width_pct')}")
+            print(f"- BB %B: {payload.get('bb_pct_b')}")
+            print(f"- BB Position: {payload.get('bb_position')}")
+            print(f"- KC Upper: {payload.get('kc_upper')}")
+            print(f"- KC Lower: {payload.get('kc_lower')}")
+            print(f"- Squeeze: {payload.get('squeeze')}")
+            print(f"- Hist Vol %: {payload.get('hist_vol_pct')}")
+            print(f"- Chandelier Long: {payload.get('chandelier_long')}")
+            print(f"- Chandelier Short: {payload.get('chandelier_short')}")
+            print(f"- Regime: {payload.get('vol_regime')}")
+            if payload.get("bb_upper") in (None, "") and len(snap.candles.closes) < 20:
+                print(f"- Warning: need 20 candles for BB (have {len(snap.candles.closes)})")
+        if getattr(args, "volume", False):
+            print("Volume")
+            print(f"- Base Vol (last): {payload.get('volume_base_last')}")
+            print(f"- Quote Vol (last): {payload.get('volume_quote_last')}")
+            print(f"- Quote Vol MA20: {payload.get('volume_quote_avg_20')}")
+            print(f"- Quote Vol MA50: {payload.get('volume_quote_avg_50')}")
+            print(f"- Quote Vol Std20: {payload.get('volume_quote_std_20')}")
+            print(f"- Quote Vol Z20: {payload.get('volume_quote_zscore_20')}")
+            print(f"- Trend: {payload.get('volume_quote_trend')}")
+            print(f"- Spike: {payload.get('volume_spike')}")
+            print(f"- Taker Buy Ratio: {payload.get('taker_buy_ratio')}")
+            print(f"- Taker Buy Ratio MA20: {payload.get('taker_buy_ratio_avg20')}")
+            print(f"- Buy Pressure: {payload.get('buy_pressure')}")
+            print(f"- OBV: {payload.get('obv')}")
+            print(f"- OBV Trend: {payload.get('obv_trend')}")
+            print(f"- VWAP 20: {payload.get('vwap_20')}")
+            print(f"- Price vs VWAP %: {payload.get('price_vs_vwap_pct')}")
+            print(f"- Vol-Price Confirmation: {payload.get('vol_price_confirmation')}")
+            print(f"- Bid Qty: {payload.get('bid_qty')}")
+            print(f"- Ask Qty: {payload.get('ask_qty')}")
+            print(f"- Book Imbalance: {payload.get('book_imbalance')}")
+            print(f"- Liquidity Zones: {payload.get('liquidity_zones')}")
+            print(f"- Buy Wall Price: {payload.get('buy_wall_price')}")
+            print(f"- Buy Wall Qty: {payload.get('buy_wall_qty')}")
+            print(f"- Sell Wall Price: {payload.get('sell_wall_price')}")
+            print(f"- Sell Wall Qty: {payload.get('sell_wall_qty')}")
+        if getattr(args, "structure", False):
+            print("Structure")
+            print(f"- Structure Trend: {payload.get('structure_trend')}")
+            print(f"- Range State: {payload.get('range_state')}")
+            print(f"- Range High: {payload.get('range_high')}")
+            print(f"- Range Low: {payload.get('range_low')}")
+            print(f"- Range Width %: {payload.get('range_width_pct')}")
+            bos_dir = payload.get("bos_direction") if payload.get("bos") == "True" else "n/a"
+            choch_dir = payload.get("choch_direction") if payload.get("choch") == "True" else "n/a"
+            print(f"- BOS: {payload.get('bos')} ({bos_dir})")
+            print(f"- CHOCH: {payload.get('choch')} ({choch_dir})")
+            print(f"- Accumulation/Distribution: {payload.get('accumulation')}")
+            print(f"- Price Zone: {payload.get('price_zone')}")
+            print(f"- BOS Streak: {payload.get('bos_streak')}")
+            print(f"- Last Swing High: {payload.get('last_swing_high')}")
+            print(f"- Last Swing Low: {payload.get('last_swing_low')}")
+            print(f"- Prev Swing High: {payload.get('prev_swing_high')}")
+            print(f"- Prev Swing Low: {payload.get('prev_swing_low')}")
+            print(f"- FVG Count: {payload.get('fvg_count')}")
+            print(
+                f"- Last FVG: {payload.get('last_fvg_direction')} "
+                f"[{payload.get('last_fvg_low')}, {payload.get('last_fvg_high')}] "
+                f"mitigated={payload.get('last_fvg_mitigated')}"
+            )
+        if getattr(args, "execution", False):
+            print("Execution Summary")
+            if payload.get("execution_available") == "True":
+                print(
+                    f"- Spread: {payload.get('exec_spread_abs')} "
+                    f"({payload.get('exec_spread_pct')}) → {payload.get('exec_spread_quality')}"
+                )
+                print(
+                    f"- Slippage ({payload.get('exec_notional_used')} USDT {payload.get('exec_side').upper()}): "
+                    f"{payload.get('exec_slippage_pct')}"
+                )
+                depth_state = payload.get("exec_depth_imbalance")
+                print(f"- Market Depth: imbalance={depth_state}")
+                print("Execution Details")
+                print(f"- Mid Price: {payload.get('exec_mid')}")
+                print(f"- Best Bid / Ask: {payload.get('exec_best_bid')} / {payload.get('exec_best_ask')}")
+                print("Spread")
+                print(f"- Absolute: {payload.get('exec_spread_abs')}")
+                print(f"- Relative: {payload.get('exec_spread_pct')}")
+                print(f"- Quality: {payload.get('exec_spread_quality')}")
+                print("Slippage")
+                print("- Model: depth-based")
+                print(f"- Notional: {payload.get('exec_notional_used')} USDT")
+                print(f"- Avg Fill Price: {payload.get('exec_avg_fill_price')}")
+                print(f"- Slippage %: {payload.get('exec_slippage_pct')}")
+                print(f"- Effective Spread %: {payload.get('exec_effective_spread_pct')}")
+                print(f"- Market Impact %: {payload.get('exec_market_impact_pct')}")
+                print(f"- Levels Used: {payload.get('exec_levels_used')}")
+                print(f"- Fill Ratio %: {payload.get('exec_fill_ratio_pct')}")
+                print("Market Depth")
+                print(f"- Top Levels: {payload.get('exec_depth_levels')}")
+                print(f"- Bid Depth: {payload.get('exec_bid_depth_notional')}")
+                print(f"- Ask Depth: {payload.get('exec_ask_depth_notional')}")
+                print(f"- Notional Available: {payload.get('exec_notional_available')}")
+                print(f"- Imbalance: {payload.get('exec_depth_imbalance')}")
+                print(f"- Depth Spread: {payload.get('exec_depth_spread_pct')}")
+            else:
+                reason = payload.get("execution_unavailable_reason") or "unavailable"
+                print(f"- Execution: unavailable ({reason})")
+        if getattr(args, "risk", False):
+            print("Risk Summary")
+            if payload.get("risk_available") == "True":
+                print(f"- Viable: {payload.get('risk_viable')}")
+                print(f"- Risk Score: {payload.get('risk_score')}")
+                print(f"- Stop Loss: {payload.get('risk_stop_price')} ({payload.get('risk_stop_method')})")
+                print(f"- R:R (to TP2): {payload.get('risk_reward_risk_ratio')}")
+                print(f"- Position Size: {payload.get('risk_position_size_quote')} ({payload.get('risk_position_size_pct')}%)")
+                print("Risk Details")
+                print(f"- Entry: {payload.get('risk_entry_price')} ({payload.get('risk_side')})")
+                print(f"- Effective Entry: {payload.get('risk_effective_entry')}")
+                print(f"- Stop Distance %: {payload.get('risk_stop_distance_pct')}")
+                print(f"- Stop ATR Multiple: {payload.get('risk_stop_atr_multiple')}")
+                print(f"- Stop Candidates: {payload.get('risk_stop_candidates')}")
+                print(f"- TP1: {payload.get('risk_tp1')}")
+                print(f"- TP2: {payload.get('risk_tp2')}")
+                print(f"- TP3: {payload.get('risk_tp3')}")
+                print(f"- TP FVG: {payload.get('risk_tp_fvg')}")
+                print(f"- TP Structure: {payload.get('risk_tp_structure')}")
+                print(f"- TP Cloud: {payload.get('risk_tp_cloud')}")
+                print(f"- Max Loss Quote: {payload.get('risk_max_loss_quote')}")
+                print(f"- Risk % Used: {payload.get('risk_pct_used')}")
+                print(f"- Caps Applied: {payload.get('risk_caps_applied')}")
+                print(f"- Suggested Leverage: {payload.get('risk_suggested_leverage')}")
+                print(f"- Liquidation Price: {payload.get('risk_liquidation_price')}")
+                print(f"- Liquidation Distance %: {payload.get('risk_liquidation_distance_pct')}")
+                print(
+                    f"- Flags: wide_stop={payload.get('risk_flag_wide_stop')} "
+                    f"concentration_cap={payload.get('risk_flag_concentration_cap')} "
+                    f"liquidity_cap={payload.get('risk_flag_liquidity_cap')} "
+                    f"liquidation_warning={payload.get('risk_flag_liquidation_warning')} "
+                    f"low_adx_warning={payload.get('risk_flag_low_adx_warning')}"
+                )
+            else:
+                reason = payload.get("risk_rejection_reason") or "unavailable"
+                print(f"- Risk: unavailable ({reason})")
+        if getattr(args, "quant", False):
+            if payload.get("quant_available") == "True":
+                print("Quant Summary")
+                print(f"- Correlation vs {payload.get('quant_benchmark')}: {payload.get('quant_corr')}")
+                print(f"- Return Z-Score: {payload.get('quant_return_zscore')}")
+                print(f"- Volatility Regime: {payload.get('quant_vol_regime')}")
+                print(f"- Mean Reversion State: {payload.get('quant_mean_reversion_state')}")
+                print("Quant Details")
+                print(f"- Window: {payload.get('quant_window')} bars")
+                print(f"- Correlation Method: {payload.get('quant_corr_method')}")
+                print("- Series: log returns")
+                print(f"- Realized Volatility: {payload.get('quant_realized_vol')}")
+                print(f"- Rolling Mean Deviation %: {payload.get('quant_mean_dev_pct')}")
+                print(f"- Max Drawdown %: {payload.get('quant_max_drawdown_pct')}")
+                print(f"- Beta: {payload.get('quant_beta')}")
+                print(f"- Sharpe Ratio: {payload.get('quant_sharpe_ratio')}")
+                print(f"- Calmar Ratio: {payload.get('quant_calmar_ratio')}")
+                print(f"- Skewness: {payload.get('quant_skewness')}")
+                print(f"- Kurtosis: {payload.get('quant_kurtosis')}")
+                print(f"- Log Return: {payload.get('quant_log_return')}")
+                print(f"- Return Mean: {payload.get('quant_ret_mean')}")
+                print(f"- Return Std: {payload.get('quant_ret_std')}")
+                print(f"- Price vs EMA %: {payload.get('quant_price_vs_ema_pct')}")
+                print(f"- RSI: {payload.get('quant_rsi')}")
+                print(f"- MACD Hist: {payload.get('quant_macd_hist')}")
+                print(f"- ATR Norm: {payload.get('quant_atr_norm')}")
+                print(f"- Volume Z-Score: {payload.get('quant_volume_zscore')}")
+                print(f"- Spread %: {payload.get('quant_spread_pct')}")
+                print(f"- Range %: {payload.get('quant_range_pct')}")
+            else:
+                reason = payload.get("quant_unavailable_reason") or "unavailable"
+                print(f"- Quant: unavailable ({reason})")
+        if getattr(args, "crypto", False):
+            print("Crypto")
+            print(f"- Futures Market: {payload.get('futures_market')}")
+            print(f"- Funding Rate: {payload.get('funding_rate')}")
+            print(f"- Next Funding Time: {payload.get('next_funding_time')}")
+            print(f"- Open Interest: {payload.get('open_interest')}")
+        if cache_ttl_s > 0:
+            print(f"- Cache: {'hit' if cache_hit else 'miss'}")
+
+    if getattr(args, "save_snapshot", False) and not cache_hit:
+        with connect(db_path) as conn:
+            state = StateManager(conn)
+            indicators = {
+                "momentum_pct": str(payload.get("momentum_pct")),
+                "volatility_pct": str(payload.get("volatility_pct")),
+            }
+            if getattr(args, "momentum", False):
+                indicators.update(
+                    {
+                        "rsi": payload.get("rsi"),
+                        "rsi_prev": payload.get("rsi_prev"),
+                        "rsi_zone": payload.get("rsi_zone"),
+                        "macd": payload.get("macd"),
+                        "macd_signal": payload.get("macd_signal"),
+                        "macd_hist": payload.get("macd_hist"),
+                        "stoch_rsi": payload.get("stoch_rsi"),
+                        "stoch_rsi_k": payload.get("stoch_rsi_k"),
+                        "stoch_rsi_d": payload.get("stoch_rsi_d"),
+                        "stoch_rsi_bias": payload.get("stoch_rsi_bias"),
+                        "macd_bias": payload.get("macd_bias"),
+                        "williams_r": payload.get("williams_r"),
+                        "williams_r_zone": payload.get("williams_r_zone"),
+                        "cci": payload.get("cci"),
+                        "cci_zone": payload.get("cci_zone"),
+                        "roc": payload.get("roc"),
+                        "roc_bias": payload.get("roc_bias"),
+                        "composite_signal": payload.get("composite_signal"),
+                        "rsi_bullish_divergence": payload.get("rsi_bullish_divergence"),
+                        "rsi_bearish_divergence": payload.get("rsi_bearish_divergence"),
+                    }
+                )
+            if getattr(args, "trend", False):
+                indicators.update(
+                    {
+                        "ema_20": payload.get("ema_20"),
+                        "ema_50": payload.get("ema_50"),
+                        "ema_200": payload.get("ema_200"),
+                        "sma_20": payload.get("sma_20"),
+                        "sma_50": payload.get("sma_50"),
+                        "sma_200": payload.get("sma_200"),
+                        "trend_crossover": payload.get("trend_crossover"),
+                        "trend_crossover_event": payload.get("trend_crossover_event"),
+                        "trend_crossover_strength_pct": payload.get("trend_crossover_strength_pct"),
+                        "ema_50_200_crossover": payload.get("ema_50_200_crossover"),
+                        "ema_50_200_event": payload.get("ema_50_200_event"),
+                        "ema_50_200_strength_pct": payload.get("ema_50_200_strength_pct"),
+                        "sma_20_50_crossover": payload.get("sma_20_50_crossover"),
+                        "sma_20_50_event": payload.get("sma_20_50_event"),
+                        "sma_50_200_crossover": payload.get("sma_50_200_crossover"),
+                        "sma_50_200_event": payload.get("sma_50_200_event"),
+                        "adx": payload.get("adx"),
+                        "adx_pos": payload.get("adx_pos"),
+                        "adx_neg": payload.get("adx_neg"),
+                        "adx_trend_strength": payload.get("adx_trend_strength"),
+                        "ichi_tenkan": payload.get("ichi_tenkan"),
+                        "ichi_kijun": payload.get("ichi_kijun"),
+                        "ichi_senkou_a": payload.get("ichi_senkou_a"),
+                        "ichi_senkou_b": payload.get("ichi_senkou_b"),
+                        "ichi_cloud_bias": payload.get("ichi_cloud_bias"),
+                        "price_vs_ema20_pct": payload.get("price_vs_ema20_pct"),
+                        "price_vs_ema50_pct": payload.get("price_vs_ema50_pct"),
+                        "price_vs_ema200_pct": payload.get("price_vs_ema200_pct"),
+                        "trend_bias": payload.get("trend_bias"),
+                    }
+                )
+            if getattr(args, "volatility", False):
+                indicators.update(
+                    {
+                        "atr": payload.get("atr"),
+                        "atr_pct": payload.get("atr_pct"),
+                        "bb_upper": payload.get("bb_upper"),
+                        "bb_mid": payload.get("bb_mid"),
+                        "bb_lower": payload.get("bb_lower"),
+                        "bb_width_pct": payload.get("bb_width_pct"),
+                        "bb_pct_b": payload.get("bb_pct_b"),
+                        "bb_position": payload.get("bb_position"),
+                        "kc_upper": payload.get("kc_upper"),
+                        "kc_lower": payload.get("kc_lower"),
+                        "squeeze": payload.get("squeeze"),
+                        "hist_vol_pct": payload.get("hist_vol_pct"),
+                        "chandelier_long": payload.get("chandelier_long"),
+                        "chandelier_short": payload.get("chandelier_short"),
+                        "vol_regime": payload.get("vol_regime"),
+                    }
+                )
+            if getattr(args, "volume", False):
+                indicators.update(
+                    {
+                        "volume_base_last": payload.get("volume_base_last"),
+                        "volume_quote_last": payload.get("volume_quote_last"),
+                        "volume_quote_avg_20": payload.get("volume_quote_avg_20"),
+                        "volume_quote_avg_50": payload.get("volume_quote_avg_50"),
+                        "volume_quote_std_20": payload.get("volume_quote_std_20"),
+                        "volume_quote_zscore_20": payload.get("volume_quote_zscore_20"),
+                        "volume_quote_trend": payload.get("volume_quote_trend"),
+                        "volume_spike": payload.get("volume_spike"),
+                        "taker_buy_ratio": payload.get("taker_buy_ratio"),
+                        "taker_buy_ratio_avg20": payload.get("taker_buy_ratio_avg20"),
+                        "buy_pressure": payload.get("buy_pressure"),
+                        "sustained_buy_pressure": payload.get("sustained_buy_pressure"),
+                        "sustained_sell_pressure": payload.get("sustained_sell_pressure"),
+                        "obv": payload.get("obv"),
+                        "obv_trend": payload.get("obv_trend"),
+                        "vwap_20": payload.get("vwap_20"),
+                        "price_vs_vwap_pct": payload.get("price_vs_vwap_pct"),
+                        "vol_price_confirmation": payload.get("vol_price_confirmation"),
+                        "bid_qty": payload.get("bid_qty"),
+                        "ask_qty": payload.get("ask_qty"),
+                        "book_imbalance": payload.get("book_imbalance"),
+                        "liquidity_zones": payload.get("liquidity_zones"),
+                        "buy_wall_price": payload.get("buy_wall_price"),
+                        "buy_wall_qty": payload.get("buy_wall_qty"),
+                        "sell_wall_price": payload.get("sell_wall_price"),
+                        "sell_wall_qty": payload.get("sell_wall_qty"),
+                    }
+                )
+            if getattr(args, "structure", False):
+                indicators.update(
+                    {
+                        "structure_trend": payload.get("structure_trend"),
+                        "range_state": payload.get("range_state"),
+                        "range_high": payload.get("range_high"),
+                        "range_low": payload.get("range_low"),
+                        "range_width_pct": payload.get("range_width_pct"),
+                        "bos": payload.get("bos"),
+                        "bos_direction": payload.get("bos_direction"),
+                        "bos_streak": payload.get("bos_streak"),
+                        "choch": payload.get("choch"),
+                        "choch_direction": payload.get("choch_direction"),
+                        "accumulation": payload.get("accumulation"),
+                        "last_swing_high": payload.get("last_swing_high"),
+                        "last_swing_low": payload.get("last_swing_low"),
+                        "prev_swing_high": payload.get("prev_swing_high"),
+                        "prev_swing_low": payload.get("prev_swing_low"),
+                        "price_zone": payload.get("price_zone"),
+                        "fvg_count": payload.get("fvg_count"),
+                        "last_fvg_direction": payload.get("last_fvg_direction"),
+                        "last_fvg_high": payload.get("last_fvg_high"),
+                        "last_fvg_low": payload.get("last_fvg_low"),
+                        "last_fvg_mitigated": payload.get("last_fvg_mitigated"),
+                    }
+                )
+            if getattr(args, "price_action", False):
+                indicators.update(
+                    {
+                        "price_action_available": payload.get("price_action_available"),
+                        "pa_unavailable_reason": payload.get("pa_unavailable_reason"),
+                        "pa_support_level": payload.get("pa_support_level"),
+                        "pa_support_strength": payload.get("pa_support_strength"),
+                        "pa_support_distance_pct": payload.get("pa_support_distance_pct"),
+                        "pa_resistance_level": payload.get("pa_resistance_level"),
+                        "pa_resistance_strength": payload.get("pa_resistance_strength"),
+                        "pa_resistance_distance_pct": payload.get("pa_resistance_distance_pct"),
+                        "pa_structure_type": payload.get("pa_structure_type"),
+                        "pa_last_swing_high": payload.get("pa_last_swing_high"),
+                        "pa_last_swing_low": payload.get("pa_last_swing_low"),
+                        "pa_breakout": payload.get("pa_breakout"),
+                        "pa_breakdown": payload.get("pa_breakdown"),
+                        "pa_breakout_level": payload.get("pa_breakout_level"),
+                        "pa_breakdown_level": payload.get("pa_breakdown_level"),
+                        "pa_breakout_strength": payload.get("pa_breakout_strength"),
+                        "pa_patterns_json": payload.get("pa_patterns_json"),
+                        "pa_last_pattern": payload.get("pa_last_pattern"),
+                        "pa_dominant_bias": payload.get("pa_dominant_bias"),
+                        "pa_signal_count": payload.get("pa_signal_count"),
+                        "pa_confluence": payload.get("pa_confluence"),
+                    }
+                )
+            if getattr(args, "execution", False):
+                indicators.update(
+                    {
+                        "execution_available": payload.get("execution_available"),
+                        "execution_unavailable_reason": payload.get("execution_unavailable_reason"),
+                        "exec_mid": payload.get("exec_mid"),
+                        "exec_best_bid": payload.get("exec_best_bid"),
+                        "exec_best_ask": payload.get("exec_best_ask"),
+                        "exec_spread_abs": payload.get("exec_spread_abs"),
+                        "exec_spread_pct": payload.get("exec_spread_pct"),
+                        "exec_spread_quality": payload.get("exec_spread_quality"),
+                        "exec_slippage_pct": payload.get("exec_slippage_pct"),
+                        "exec_effective_spread_pct": payload.get("exec_effective_spread_pct"),
+                        "exec_market_impact_pct": payload.get("exec_market_impact_pct"),
+                        "exec_avg_fill_price": payload.get("exec_avg_fill_price"),
+                        "exec_notional_used": payload.get("exec_notional_used"),
+                        "exec_fill_ratio_pct": payload.get("exec_fill_ratio_pct"),
+                        "exec_levels_used": payload.get("exec_levels_used"),
+                        "exec_side": payload.get("exec_side"),
+                        "exec_depth_levels": payload.get("exec_depth_levels"),
+                        "exec_bid_depth_notional": payload.get("exec_bid_depth_notional"),
+                        "exec_ask_depth_notional": payload.get("exec_ask_depth_notional"),
+                        "exec_notional_available": payload.get("exec_notional_available"),
+                        "exec_depth_imbalance": payload.get("exec_depth_imbalance"),
+                        "exec_depth_spread_pct": payload.get("exec_depth_spread_pct"),
+                    }
+                )
+            if getattr(args, "risk", False):
+                indicators.update(
+                    {
+                        "risk_available": payload.get("risk_available"),
+                        "risk_viable": payload.get("risk_viable"),
+                        "risk_rejection_reason": payload.get("risk_rejection_reason"),
+                        "risk_score": payload.get("risk_score"),
+                        "risk_score_breakdown": payload.get("risk_score_breakdown"),
+                        "risk_entry_price": payload.get("risk_entry_price"),
+                        "risk_side": payload.get("risk_side"),
+                        "risk_effective_entry": payload.get("risk_effective_entry"),
+                        "risk_stop_price": payload.get("risk_stop_price"),
+                        "risk_stop_method": payload.get("risk_stop_method"),
+                        "risk_stop_distance_pct": payload.get("risk_stop_distance_pct"),
+                        "risk_stop_atr_multiple": payload.get("risk_stop_atr_multiple"),
+                        "risk_stop_candidates": payload.get("risk_stop_candidates"),
+                        "risk_tp1": payload.get("risk_tp1"),
+                        "risk_tp2": payload.get("risk_tp2"),
+                        "risk_tp3": payload.get("risk_tp3"),
+                        "risk_tp_fvg": payload.get("risk_tp_fvg"),
+                        "risk_tp_structure": payload.get("risk_tp_structure"),
+                        "risk_tp_cloud": payload.get("risk_tp_cloud"),
+                        "risk_reward_risk_ratio": payload.get("risk_reward_risk_ratio"),
+                        "risk_position_size_base": payload.get("risk_position_size_base"),
+                        "risk_position_size_quote": payload.get("risk_position_size_quote"),
+                        "risk_position_size_pct": payload.get("risk_position_size_pct"),
+                        "risk_max_loss_quote": payload.get("risk_max_loss_quote"),
+                        "risk_pct_used": payload.get("risk_pct_used"),
+                        "risk_caps_applied": payload.get("risk_caps_applied"),
+                        "risk_suggested_leverage": payload.get("risk_suggested_leverage"),
+                        "risk_liquidation_price": payload.get("risk_liquidation_price"),
+                        "risk_liquidation_distance_pct": payload.get("risk_liquidation_distance_pct"),
+                        "risk_flag_wide_stop": payload.get("risk_flag_wide_stop"),
+                        "risk_flag_concentration_cap": payload.get("risk_flag_concentration_cap"),
+                        "risk_flag_liquidity_cap": payload.get("risk_flag_liquidity_cap"),
+                        "risk_flag_liquidation_warning": payload.get("risk_flag_liquidation_warning"),
+                        "risk_flag_low_adx_warning": payload.get("risk_flag_low_adx_warning"),
+                        "price_action_available": payload.get("price_action_available"),
+                        "pa_unavailable_reason": payload.get("pa_unavailable_reason"),
+                        "pa_support_level": payload.get("pa_support_level"),
+                        "pa_support_strength": payload.get("pa_support_strength"),
+                        "pa_support_distance_pct": payload.get("pa_support_distance_pct"),
+                        "pa_resistance_level": payload.get("pa_resistance_level"),
+                        "pa_resistance_strength": payload.get("pa_resistance_strength"),
+                        "pa_resistance_distance_pct": payload.get("pa_resistance_distance_pct"),
+                        "pa_structure_type": payload.get("pa_structure_type"),
+                        "pa_last_swing_high": payload.get("pa_last_swing_high"),
+                        "pa_last_swing_low": payload.get("pa_last_swing_low"),
+                        "pa_breakout": payload.get("pa_breakout"),
+                        "pa_breakdown": payload.get("pa_breakdown"),
+                        "pa_breakout_level": payload.get("pa_breakout_level"),
+                        "pa_breakdown_level": payload.get("pa_breakdown_level"),
+                        "pa_breakout_strength": payload.get("pa_breakout_strength"),
+                        "pa_patterns_json": payload.get("pa_patterns_json"),
+                        "pa_last_pattern": payload.get("pa_last_pattern"),
+                        "pa_dominant_bias": payload.get("pa_dominant_bias"),
+                        "pa_signal_count": payload.get("pa_signal_count"),
+                        "pa_confluence": payload.get("pa_confluence"),
+                    }
+                )
+            if getattr(args, "quant", False):
+                indicators.update(
+                    {
+                        "quant_available": payload.get("quant_available"),
+                        "quant_unavailable_reason": payload.get("quant_unavailable_reason"),
+                        "quant_window": payload.get("quant_window"),
+                        "quant_benchmark": payload.get("quant_benchmark"),
+                        "quant_corr_method": payload.get("quant_corr_method"),
+                        "quant_corr": payload.get("quant_corr"),
+                        "quant_beta": payload.get("quant_beta"),
+                        "quant_return_zscore": payload.get("quant_return_zscore"),
+                        "quant_realized_vol": payload.get("quant_realized_vol"),
+                        "quant_vol_regime": payload.get("quant_vol_regime"),
+                        "quant_mean_dev_pct": payload.get("quant_mean_dev_pct"),
+                        "quant_mean_reversion_state": payload.get("quant_mean_reversion_state"),
+                        "quant_max_drawdown_pct": payload.get("quant_max_drawdown_pct"),
+                        "quant_sharpe_ratio": payload.get("quant_sharpe_ratio"),
+                        "quant_calmar_ratio": payload.get("quant_calmar_ratio"),
+                        "quant_skewness": payload.get("quant_skewness"),
+                        "quant_kurtosis": payload.get("quant_kurtosis"),
+                        "quant_log_return": payload.get("quant_log_return"),
+                        "quant_ret_mean": payload.get("quant_ret_mean"),
+                        "quant_ret_std": payload.get("quant_ret_std"),
+                        "quant_price_vs_ema_pct": payload.get("quant_price_vs_ema_pct"),
+                        "quant_rsi": payload.get("quant_rsi"),
+                        "quant_macd_hist": payload.get("quant_macd_hist"),
+                        "quant_atr_norm": payload.get("quant_atr_norm"),
+                        "quant_volume_zscore": payload.get("quant_volume_zscore"),
+                        "quant_spread_pct": payload.get("quant_spread_pct"),
+                        "quant_range_pct": payload.get("quant_range_pct"),
+                    }
+                )
+            if getattr(args, "crypto", False):
+                indicators.update(
+                    {
+                        "futures_market": payload.get("futures_market"),
+                        "funding_rate": payload.get("funding_rate"),
+                        "next_funding_time": payload.get("next_funding_time"),
+                        "open_interest": payload.get("open_interest"),
+                    }
+                )
+            if payload.get("candle_count") is not None:
+                indicators["candle_count"] = payload.get("candle_count")
+            state.create_market_snapshot(
+                symbol=symbol,
+                timeframe=timeframe,
+                captured_at_utc=utcnow_iso(),
+                last_price=str(payload.get("last_price")),
+                bid=str(payload.get("bid")) if payload.get("bid") is not None else None,
+                ask=str(payload.get("ask")) if payload.get("ask") is not None else None,
+                spread_pct=str(payload.get("spread_pct")) if payload.get("spread_pct") is not None else None,
+                change_percent=str(change_pct) if change_pct is not None else None,
+                volume_quote=str(volume_24h) if volume_24h is not None else None,
+                indicators_json=_json.dumps(indicators, separators=(",", ":")),
+                condition_summary=cond,
+                enabled_flags="basic"
+                + (",momentum" if getattr(args, "momentum", False) else "")
+                + (",trend" if getattr(args, "trend", False) else "")
+                + (",volatility" if getattr(args, "volatility", False) else "")
+                + (",volume" if getattr(args, "volume", False) else "")
+                + (",structure" if getattr(args, "structure", False) else "")
+                + (",price_action" if getattr(args, "price_action", False) else "")
+                + (",execution" if getattr(args, "execution", False) else "")
+                + (",risk" if getattr(args, "risk", False) else "")
+                + (",quant" if getattr(args, "quant", False) else "")
+                + (",crypto" if getattr(args, "crypto", False) else ""),
+                config_hash=None,
+            )
+    return 0
+
+
+def cmd_market_snapshot_list(args: argparse.Namespace) -> int:
+    limit = int(getattr(args, "limit", 50))
+    symbol = str(getattr(args, "symbol", "") or "").strip().upper()
+    timeframe = str(getattr(args, "timeframe", "") or "").strip()
+    paths = ConfigPaths.from_cli(config_path=args.config, db_path=args.db)
+    config_path = ensure_default_config(paths.config_path)
+    db_path = ensure_db_initialized(config_path=config_path, db_path=paths.db_path)
+    with connect(db_path) as conn:
+        state = StateManager(conn)
+        rows = state.list_market_snapshots(
+            limit=limit,
+            symbol=symbol or None,
+            timeframe=timeframe or None,
+        )
+    print(f"Market snapshots: {len(rows)}")
+    if not rows:
+        return 0
+    print("ID  SYMBOL     TF   LAST_PRICE      COND      FLAGS                AT_UTC")
+    for r in rows:
+        print(
+            f"{str(r.get('id') or ''):>3} "
+            f"{str(r.get('symbol') or ''):<9} "
+            f"{str(r.get('timeframe') or ''):<4} "
+            f"{str(r.get('last_price') or ''):<13} "
+            f"{str(r.get('condition_summary') or ''):<9} "
+            f"{str(r.get('enabled_flags') or ''):<20} "
+            f"{str(r.get('captured_at_utc') or '')}"
+        )
+    return 0
+
+
+def cmd_market_snapshot_show(args: argparse.Namespace) -> int:
+    snap_id = getattr(args, "id", None)
+    if not snap_id:
+        print("Missing snapshot id")
+        return 2
+    paths = ConfigPaths.from_cli(config_path=args.config, db_path=args.db)
+    config_path = ensure_default_config(paths.config_path)
+    db_path = ensure_db_initialized(config_path=config_path, db_path=paths.db_path)
+    with connect(db_path) as conn:
+        state = StateManager(conn)
+        row = state.get_market_snapshot(snapshot_id=int(snap_id))
+    if not row:
+        print("(not found)")
+        return 0
+    print("Market Snapshot")
+    for k in (
+        "id",
+        "symbol",
+        "timeframe",
+        "captured_at_utc",
+        "last_price",
+        "bid",
+        "ask",
+        "spread_pct",
+        "change_percent",
+        "volume_quote",
+        "condition_summary",
+        "enabled_flags",
+        "config_hash",
+    ):
+        print(f"- {k}: {row.get(k)}")
+    indicators = None
+    try:
+        if row.get("indicators_json"):
+            indicators = _json.loads(str(row.get("indicators_json")))
+    except Exception:
+        indicators = None
+    if indicators:
+        print("Indicators")
+        for k, v in indicators.items():
+            print(f"- {k}: {v}")
     return 0
 
 
@@ -7181,6 +9125,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_sync_oo.add_argument("--symbol", type=str, default=None, help="Optional symbol (e.g. BTCUSDT).")
     p_sync_oo.set_defaults(fn=cmd_sync_open_orders)
 
+    p_sync_fng = sync_sub.add_parser("fear-greed", help="Sync Fear & Greed Index into the local cache.")
+    _add_common_paths(p_sync_fng)
+    _add_exchange_tls_only_args(p_sync_fng)
+    p_sync_fng.set_defaults(fn=cmd_sync_fear_greed)
+
     p_show = sub.add_parser("show", help="Show cached state from SQLite (no network).")
     _add_common_paths(p_show)
     show_sub = p_show.add_subparsers(dest="show_cmd", required=True)
@@ -7203,6 +9152,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_show_oo.add_argument("--symbol", type=str, default=None, help="Optional symbol (e.g. BTCUSDT).")
     p_show_oo.add_argument("--limit", type=int, default=None, help="Limit rows.")
     p_show_oo.set_defaults(fn=cmd_show_open_orders)
+
+    p_show_fng = show_sub.add_parser("fear-greed", help="Show cached Fear & Greed Index.")
+    _add_common_paths(p_show_fng)
+    p_show_fng.add_argument("--limit", type=int, default=20, help="Limit rows.")
+    p_show_fng.set_defaults(fn=cmd_show_fear_greed)
 
     p_show_audit = show_sub.add_parser("audit", help="Show cached audit log entries.")
     _add_common_paths(p_show_audit)
@@ -7606,6 +9560,73 @@ def build_parser() -> argparse.ArgumentParser:
     p_menu = sub.add_parser("menu", help="Interactive menu wrapper over subcommands.")
     _add_common_paths(p_menu)
     p_menu.set_defaults(fn=cmd_menu)
+
+    p_market = sub.add_parser("market", help="Market data status (basic).")
+    _add_common_paths(p_market)
+    market_sub = p_market.add_subparsers(dest="market_cmd", required=True)
+
+    p_market_status = market_sub.add_parser("status", help="Basic market status for a single timeframe.")
+    _add_common_paths(p_market_status)
+    _add_exchange_tls_only_args(p_market_status)
+    p_market_status.add_argument("--symbol", required=True, help="Symbol (e.g. SOLUSDT).")
+    p_market_status.add_argument("--timeframe", required=True, help="Timeframe (e.g. 1h).")
+    p_market_status.add_argument("--limit", type=int, default=100, help="Candle limit (default: 100).")
+    p_market_status.add_argument("--market-env", choices=["mainnet_public", "testnet"], default="mainnet_public")
+    p_market_status.add_argument("--json", action="store_true", help="Output JSON only.")
+    p_market_status.add_argument("--compact", action="store_true", help="Compact single-line output.")
+    p_market_status.add_argument("--table", action="store_true", help="Key/value table output.")
+    p_market_status.add_argument("--cache", default=None, help="Cache TTL (e.g. 5s, 60, 1m, 1h).")
+    p_market_status.add_argument("--save-snapshot", action="store_true", help="Persist a market snapshot.")
+    p_market_status.add_argument("--profile", choices=["quick", "trend", "full"], help="Preset analysis profile.")
+    p_market_status.add_argument("--momentum", action="store_true", help="Include RSI/MACD/Stoch RSI section.")
+    p_market_status.add_argument("--trend", action="store_true", help="Include EMA/SMA + crossover section.")
+    p_market_status.add_argument("--volatility", action="store_true", help="Include ATR/Bollinger section.")
+    p_market_status.add_argument("--volume", action="store_true", help="Include volume & liquidity section.")
+    p_market_status.add_argument("--structure", action="store_true", help="Include structure (BOS/CHOCH, range, accumulation).")
+    p_market_status.add_argument("--price-action", action="store_true", help="Include price-action module (S/R, structure, breakouts, patterns).")
+    p_market_status.add_argument("--execution", action="store_true", help="Include execution-quality metrics (spread/slippage/depth).")
+    p_market_status.add_argument("--quant", action="store_true", help="Include quant metrics (correlation/stat signals/ML features).")
+    p_market_status.add_argument("--crypto", action="store_true", help="Include crypto-specific metrics (funding/open interest).")
+    p_market_status.add_argument("--volume-window-fast", type=int, default=None, help="Fast volume MA window (default from config).")
+    p_market_status.add_argument("--volume-window-slow", type=int, default=None, help="Slow volume MA window (default from config).")
+    p_market_status.add_argument("--volume-spike-ratio", type=float, default=None, help="Spike ratio threshold (default from config).")
+    p_market_status.add_argument("--volume-zscore", type=float, default=None, help="Volume z-score threshold (default from config).")
+    p_market_status.add_argument("--volume-buy-ratio", type=float, default=None, help="Taker buy ratio for buy pressure (default from config).")
+    p_market_status.add_argument("--volume-sell-ratio", type=float, default=None, help="Taker buy ratio for sell pressure (default from config).")
+    p_market_status.add_argument("--volume-depth", type=int, default=None, help="Order book depth limit for liquidity metrics.")
+    p_market_status.add_argument("--volume-wall-ratio", type=float, default=None, help="Wall size multiple vs median (default from config).")
+    p_market_status.add_argument("--volume-imbalance", type=float, default=None, help="Book imbalance threshold (default from config).")
+    p_market_status.add_argument("--execution-depth", type=int, default=None, help="Order book depth levels for execution metrics (default 10).")
+    p_market_status.add_argument("--execution-notional", type=float, default=None, help="Notional size (quote) for slippage estimate (default 1000).")
+    p_market_status.add_argument("--execution-side", type=str, default=None, help="Side for slippage simulation (buy|sell).")
+    p_market_status.add_argument("--risk", action="store_true", help="Include risk sizing/stop/TP metrics.")
+    p_market_status.add_argument("--risk-side", type=str, default=None, help="Risk side for stop/TP sizing (long|short).")
+    p_market_status.add_argument("--risk-entry", type=float, default=None, help="Override entry price for risk sizing.")
+    p_market_status.add_argument("--risk-pct", type=float, default=None, help="Risk percent of account (default 1).")
+    p_market_status.add_argument("--risk-account-balance", type=float, default=None, help="Account balance to use for sizing (quote).")
+    p_market_status.add_argument("--risk-max-position-pct", type=float, default=None, help="Max position %% cap (default 20).")
+    p_market_status.add_argument("--benchmark", type=str, default=None, help="Benchmark symbol for quant correlation (default BTCUSDT).")
+    p_market_status.add_argument("--quant-window", type=int, default=None, help="Quant lookback window in bars (default 200).")
+    p_market_status.add_argument("--corr-method", type=str, default=None, help="Correlation method (default pearson).")
+    p_market_status.add_argument("--strict", action="store_true", help="Fail if requested indicators are unavailable.")
+    p_market_status.add_argument("--debug", action="store_true", help="Print additional indicator debug values.")
+    p_market_status.set_defaults(fn=cmd_market_status)
+
+    p_market_snapshot = market_sub.add_parser("snapshot", help="Market snapshots (list/show).")
+    _add_common_paths(p_market_snapshot)
+    market_snap_sub = p_market_snapshot.add_subparsers(dest="market_snap_cmd", required=True)
+
+    p_market_snap_list = market_snap_sub.add_parser("list", help="List market snapshots.")
+    _add_common_paths(p_market_snap_list)
+    p_market_snap_list.add_argument("--limit", type=int, default=50, help="Limit rows (default: 50).")
+    p_market_snap_list.add_argument("--symbol", type=str, default=None, help="Filter by symbol (e.g. SOLUSDT).")
+    p_market_snap_list.add_argument("--timeframe", type=str, default=None, help="Filter by timeframe (e.g. 1h).")
+    p_market_snap_list.set_defaults(fn=cmd_market_snapshot_list)
+
+    p_market_snap_show = market_snap_sub.add_parser("show", help="Show one market snapshot.")
+    _add_common_paths(p_market_snap_show)
+    p_market_snap_show.add_argument("id", type=int, help="Snapshot id.")
+    p_market_snap_show.set_defaults(fn=cmd_market_snapshot_show)
 
     p_dust = sub.add_parser("dust", help="Dust ledger (accounting-only leftover balances).")
     _add_common_paths(p_dust)

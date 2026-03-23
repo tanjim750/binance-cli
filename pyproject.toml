@@ -11,6 +11,18 @@ requires-python = ">=3.11"
 authors = [{ name = "Tanjim Abubokor" }]
 dependencies = []
 
+[project.optional-dependencies]
+market = [
+  "pandas>=2.0",
+  "pandas-ta>=0.3.14b0",
+]
+news = [
+  "twscrape",
+]
+youtube = [
+  "google-api-python-client",
+]
+
 [project.scripts]
 cryptogent = "cryptogent.cli.main:main"
 
@@ -20,4 +32,3 @@ package-dir = { "" = "." }
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["cryptogent*"]
-

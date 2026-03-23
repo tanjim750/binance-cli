@@ -345,6 +345,7 @@ def execute_market_buy_quote(
         elif raw_status == "PARTIALLY_FILLED":
             local_status = "partially_filled"
 
+        fee_breakdown_json = _safe_json(fills.commission_breakdown) if fills and fills.commission_breakdown else None
         state.update_execution(
             execution_id=execution_id,
             local_status=local_status,
@@ -355,6 +356,7 @@ def execute_market_buy_quote(
             total_quote_spent=str(fills.total_quote_spent) if fills else None,
             commission_total=str(fills.commission_total) if fills and fills.commission_total is not None else None,
             commission_asset=(fills.commission_asset if fills else None),
+            fee_breakdown_json=fee_breakdown_json,
             fills_count=(fills.fills_count if fills else None),
             retry_count=retry_count,
             message=note,
@@ -633,6 +635,7 @@ def execute_limit_buy(
         elif raw_status in ("EXPIRED",):
             local_status = "expired"
 
+        fee_breakdown_json = _safe_json(fills.commission_breakdown) if fills and fills.commission_breakdown else None
         state.update_execution(
             execution_id=execution_id,
             local_status=local_status,
@@ -643,6 +646,7 @@ def execute_limit_buy(
             total_quote_spent=str(fills.total_quote_spent) if fills else None,
             commission_total=str(fills.commission_total) if fills and fills.commission_total is not None else None,
             commission_asset=(fills.commission_asset if fills else None),
+            fee_breakdown_json=fee_breakdown_json,
             fills_count=(fills.fills_count if fills else None),
             retry_count=retry_count,
             message=note,
